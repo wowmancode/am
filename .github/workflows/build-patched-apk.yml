@@ -108,11 +108,35 @@ jobs:
             sed -n "s/.*versionName='\([^']*\)'.*/\1/p"
           )"
 
+          BASE_MIN_SDK="$(
+            "$BUILD_TOOLS/aapt2" dump badging base.apk |
+            sed -n "s/^sdkVersion:'\([^']*\)'.*/\1/p" |
+            head -1
+          )"
+
+          BASE_TARGET_SDK="$(
+            "$BUILD_TOOLS/aapt2" dump badging base.apk |
+            sed -n "s/^targetSdkVersion:'\([^']*\)'.*/\1/p" |
+            head -1
+          )"
+
+          if [ -z "$BASE_VERSION_CODE" ] || \
+             [ -z "$BASE_VERSION_NAME" ] || \
+             [ -z "$BASE_MIN_SDK" ] || \
+             [ -z "$BASE_TARGET_SDK" ]; then
+            echo "ERROR: failed to read package metadata from base.apk" >&2
+            exit 1
+          fi
+
           echo "BASE_VERSION_CODE=$BASE_VERSION_CODE" >> "$GITHUB_ENV"
           echo "BASE_VERSION_NAME=$BASE_VERSION_NAME" >> "$GITHUB_ENV"
+          echo "BASE_MIN_SDK=$BASE_MIN_SDK" >> "$GITHUB_ENV"
+          echo "BASE_TARGET_SDK=$BASE_TARGET_SDK" >> "$GITHUB_ENV"
 
           echo "Base versionCode: $BASE_VERSION_CODE"
           echo "Base versionName: $BASE_VERSION_NAME"
+          echo "Base minSdkVersion: $BASE_MIN_SDK"
+          echo "Base targetSdkVersion: $BASE_TARGET_SDK"
 
       - name: Decode base APK
         run: |
@@ -502,8 +526,8 @@ jobs:
               -o "$TEMP_APK" \
               -I "$ANDROID_PLATFORM/android.jar" \
               --manifest "$SOURCE" \
-              --min-sdk-version 24 \
-              --target-sdk-version 36 \
+              --min-sdk-version "$BASE_MIN_SDK" \
+              --target-sdk-version "$BASE_TARGET_SDK" \
               --version-code "$BASE_VERSION_CODE" \
               --version-name "$BASE_VERSION_NAME"
 
@@ -547,29 +571,26 @@ jobs:
             MANIFEST="$2"
             OUTPUT="$3"
 
-            WORK="$RUNNER_TEMP/split-$RANDOM"
+            WORK="$(mktemp -d "$RUNNER_TEMP/split.XXXXXX")"
+            OUTPUT_ABS="$GITHUB_WORKSPACE/$OUTPUT"
 
-            mkdir -p "$WORK"
-
-            unzip -q \
-              "$ORIGINAL" \
-              -d "$WORK"
-
-            rm -rf \
-              "$WORK/META-INF"
+            # Keep the original archive intact so stored native libraries stay
+            # stored. Rebuilding with `zip -r` deflates lib/**/*.so and Android
+            # rejects the split when extractNativeLibs is false.
+            cp "$ORIGINAL" "$OUTPUT_ABS"
 
             cp \
               "$MANIFEST" \
               "$WORK/AndroidManifest.xml"
 
+            if zipinfo -1 "$OUTPUT_ABS" | grep -q '^META-INF/'; then
+              zip -q -d "$OUTPUT_ABS" 'META-INF/*'
+            fi
+            zip -q -d "$OUTPUT_ABS" AndroidManifest.xml
+
             (
               cd "$WORK"
-
-              zip \
-                -q \
-                -r \
-                "$GITHUB_WORKSPACE/$OUTPUT" \
-                .
+              zip -q -0 "$OUTPUT_ABS" AndroidManifest.xml
             )
 
             rm -rf "$WORK"
@@ -589,6 +610,49 @@ jobs:
             split_config.xxhdpi.apk \
             compiled-manifests/xxhdpi-manifest.bin \
             unsigned-splits/split_config.xxhdpi.apk
+
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZIP_STORED, ZipFile
+
+          pairs = [
+              (Path("split_config.arm64_v8a.apk"), Path("unsigned-splits/split_config.arm64_v8a.apk")),
+              (Path("split_config.en.apk"), Path("unsigned-splits/split_config.en.apk")),
+              (Path("split_config.xxhdpi.apk"), Path("unsigned-splits/split_config.xxhdpi.apk")),
+          ]
+
+          for original_path, rebuilt_path in pairs:
+              with ZipFile(original_path) as original, ZipFile(rebuilt_path) as rebuilt:
+                  original_entries = {entry.filename: entry for entry in original.infolist()}
+                  rebuilt_entries = {entry.filename: entry for entry in rebuilt.infolist()}
+
+                  for name, before in original_entries.items():
+                      if name == "AndroidManifest.xml" or name.startswith("META-INF/"):
+                          continue
+                      after = rebuilt_entries.get(name)
+                      if after is None:
+                          raise SystemExit(f"ERROR: {rebuilt_path} lost {name}")
+                      if (after.CRC, after.file_size, after.compress_size, after.compress_type) != (
+                          before.CRC,
+                          before.file_size,
+                          before.compress_size,
+                          before.compress_type,
+                      ):
+                          raise SystemExit(f"ERROR: {rebuilt_path} changed {name}")
+
+                  native_libraries = [
+                      entry for entry in rebuilt_entries.values()
+                      if entry.filename.startswith("lib/") and entry.filename.endswith(".so")
+                  ]
+                  compressed = [entry.filename for entry in native_libraries if entry.compress_type != ZIP_STORED]
+                  if compressed:
+                      raise SystemExit(
+                          f"ERROR: compressed native libraries in {rebuilt_path}: " + ", ".join(compressed)
+                      )
+
+                  print(f"Verified preserved ZIP entries: {rebuilt_path}")
+                  print(f"Verified stored native libraries: {len(native_libraries)}")
+          PY
 
       - name: Verify unsigned split manifests are binary
         run: |
@@ -669,7 +733,7 @@ jobs:
               --ks patch.keystore \
               --ks-pass pass:android \
               --key-pass pass:android \
-              --min-sdk-version 24 \
+              --min-sdk-version "$BASE_MIN_SDK" \
               --v1-signing-enabled false \
               --v2-signing-enabled true \
               --v3-signing-enabled true \
@@ -680,7 +744,7 @@ jobs:
             echo "=== VERIFYING SIGNATURE ==="
 
             "$BUILD_TOOLS/apksigner" verify \
-              --min-sdk-version 24 \
+              --min-sdk-version "$BASE_MIN_SDK" \
               --verbose \
               --print-certs \
               "$OUTPUT"
@@ -749,12 +813,29 @@ jobs:
               head -1
             )"
 
+            VERSION_CODE="$(
+              "$BUILD_TOOLS/aapt2" \
+                dump badging \
+                "$APK" |
+              sed -n \
+                "s/^package:.*versionCode='\([^']*\)'.*/\1/p" |
+              head -1
+            )"
+
             echo
             echo "Detected package: $PACKAGE"
+            echo "Detected versionCode: $VERSION_CODE"
 
             if [ "$PACKAGE" != "$EXPECTED" ]; then
 
               echo "ERROR: package mismatch in $APK"
+              exit 1
+
+            fi
+
+            if [ "$VERSION_CODE" != "$BASE_VERSION_CODE" ]; then
+
+              echo "ERROR: versionCode mismatch in $APK"
               exit 1
 
             fi
@@ -766,11 +847,14 @@ jobs:
         run: |
           set -e
 
-          for APK in \
-            output/split_config.arm64_v8a.apk \
-            output/split_config.en.apk \
-            output/split_config.xxhdpi.apk
+          for PAIR in \
+            "split_config.arm64_v8a.apk|output/split_config.arm64_v8a.apk" \
+            "split_config.en.apk|output/split_config.en.apk" \
+            "split_config.xxhdpi.apk|output/split_config.xxhdpi.apk"
           do
+
+            ORIGINAL="${PAIR%%|*}"
+            APK="${PAIR#*|}"
 
             echo
             echo "===== $APK ====="
@@ -783,7 +867,61 @@ jobs:
                 'package=|split=|configForSplit' \
                 || true
 
+            ORIGINAL_SPLIT="$(
+              "$BUILD_TOOLS/aapt2" dump badging "$ORIGINAL" |
+              sed -n "s/^package:.* split='\([^']*\)'.*/\1/p" |
+              head -1
+            )"
+
+            OUTPUT_SPLIT="$(
+              "$BUILD_TOOLS/aapt2" dump badging "$APK" |
+              sed -n "s/^package:.* split='\([^']*\)'.*/\1/p" |
+              head -1
+            )"
+
+            if [ -z "$ORIGINAL_SPLIT" ] || [ "$OUTPUT_SPLIT" != "$ORIGINAL_SPLIT" ]; then
+              echo "ERROR: split identity mismatch in $APK" >&2
+              echo "Original: $ORIGINAL_SPLIT" >&2
+              echo "Output: $OUTPUT_SPLIT" >&2
+              exit 1
+            fi
+
           done
+
+      - name: Verify native libraries are installable
+        shell: bash
+        run: |
+          set -e
+
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZIP_STORED, ZipFile
+
+          found = 0
+          for apk in sorted(Path("output").glob("*.apk")):
+              with ZipFile(apk) as archive:
+                  libraries = [
+                      entry for entry in archive.infolist()
+                      if entry.filename.startswith("lib/") and entry.filename.endswith(".so")
+                  ]
+                  found += len(libraries)
+                  compressed = [entry.filename for entry in libraries if entry.compress_type != ZIP_STORED]
+                  if compressed:
+                      raise SystemExit(
+                          f"ERROR: {apk} contains compressed native libraries: " + ", ".join(compressed)
+                      )
+                  print(f"{apk}: {len(libraries)} stored native libraries")
+
+          if found == 0:
+              raise SystemExit("ERROR: no native libraries found in the split set")
+          PY
+
+          "$BUILD_TOOLS/zipalign" \
+            -c \
+            -P 16 \
+            -v \
+            4 \
+            output/split_config.arm64_v8a.apk
 
       - name: Verify custom effects
         run: |
@@ -809,6 +947,26 @@ jobs:
           set -e
 
           cd output
+
+          cat > install.sh <<'EOF'
+          #!/bin/sh
+          set -eu
+
+          if ! command -v adb >/dev/null 2>&1; then
+            echo "ERROR: adb is not installed or is not on PATH." >&2
+            exit 1
+          fi
+
+          SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+
+          adb install-multiple -r \
+            "$SCRIPT_DIR/base.apk" \
+            "$SCRIPT_DIR/split_config.arm64_v8a.apk" \
+            "$SCRIPT_DIR/split_config.en.apk" \
+            "$SCRIPT_DIR/split_config.xxhdpi.apk"
+          EOF
+
+          chmod +x install.sh
 
           zip \
             -9 \
