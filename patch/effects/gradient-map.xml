@@ -1,0 +1,47 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<effect id="com.wowmancode.effects.gradientmap" name="@string/name" desc="@string/desc" category="color" tags="color,colorGrading,lumaMap,raster" thumb="thumb/palmap.webp">
+    <strings>
+        <locale lang="en">
+            <string name="name">Gradient Map</string>
+            <string name="desc">Maps image luminance through a customizable four-color gradient.</string>
+            <string name="shadow">Shadow Color</string>
+            <string name="midtone1">Lower Midtone</string>
+            <string name="midtone2">Upper Midtone</string>
+            <string name="highlight">Highlight Color</string>
+            <string name="reverse">Reverse</string>
+            <string name="blend">Blend</string>
+        </locale>
+    </strings>
+    <params>
+        <texture id="inputImg" srcType="content" />
+        <color id="shadow" default="#FF000000" label="@string/shadow" alpha="false" />
+        <color id="midtone1" default="#FF6A00FF" label="@string/midtone1" alpha="false" />
+        <color id="midtone2" default="#FFFF5A00" label="@string/midtone2" alpha="false" />
+        <color id="highlight" default="#FFFFFFFF" label="@string/highlight" alpha="false" />
+        <switch id="reverse" default="false" label="@string/reverse" />
+        <spinner id="blend" default="1.0" min="0.0" max="1.0" step="0.01" label="@string/blend" type="percent" />
+    </params>
+    <shader type="fragment" precision="high"><![CDATA[
+        const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+
+        vec3 gradientAt(float t) {
+            t = clamp(t, 0.0, 1.0);
+            if (t < 0.3333333) {
+                return mix(shadow.rgb, midtone1.rgb, t * 3.0);
+            } else if (t < 0.6666667) {
+                return mix(midtone1.rgb, midtone2.rgb, (t - 0.3333333) * 3.0);
+            }
+            return mix(midtone2.rgb, highlight.rgb, (t - 0.6666667) * 3.0);
+        }
+
+        void main() {
+            vec4 src = texture2DCv(inputImg.texture, acScreenNorm);
+            float a = src.a;
+            vec3 straight = src.rgb / max(a, 0.0001);
+            float y = dot(straight, LUMA);
+            if (reverse) y = 1.0 - y;
+            vec3 mapped = gradientAt(y) * a;
+            gl_FragColor = vec4(mix(src.rgb, mapped, blend), a);
+        }
+    ]]></shader>
+</effect>
