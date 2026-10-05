@@ -1,12 +1,12 @@
-name: Build Patched Alight Motion
+name: Build Side-by-Side Alight Motion
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
-      - 'patch/effects/**'
-      - '.github/workflows/build-patched-apk.yml'
-  workflow_dispatch:
+      - "patch/effects/**"
+      - ".github/workflows/build-patched-apk.yml"
 
 permissions:
   contents: read
@@ -14,51 +14,112 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Download original APK
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download am --repo "$GITHUB_REPOSITORY" --pattern 'Alight.Motion.apk' --clobber
+        run: |
+          gh release download am \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "Alight.Motion.apk" \
+            --clobber
 
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip zip openjdk-17-jdk
+          sudo apt-get install -y unzip zip openjdk-17-jdk curl
 
-      - name: Inject custom effect assets
+          curl -L --fail \
+            -o apktool.jar \
+            https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+
+          java -jar apktool.jar --version
+
+      - name: Decode
+        run: |
+          java -jar apktool.jar d \
+            -f Alight.Motion.apk \
+            -o decoded
+
+      - name: Configure separate app identity
         shell: bash
         run: |
-          set -e
-          cp Alight.Motion.apk Alight.Motion.patched-unsigned.apk
-          mkdir -p inject/assets/effects
-          cp patch/effects/invert-flash.xml inject/assets/effects/
-          cp patch/effects/gradient-map.xml inject/assets/effects/
-          cp patch/effects/tv-simulator.xml inject/assets/effects/
-          cd inject
-          zip -q -u ../Alight.Motion.patched-unsigned.apk \
-            assets/effects/invert-flash.xml \
-            assets/effects/gradient-map.xml \
-            assets/effects/tv-simulator.xml
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
 
-      - name: Verify injected effect assets
+          yml = Path("decoded/apktool.yml")
+          text = yml.read_text()
+
+          pattern = r'(?m)^(\s*renameManifestPackage:)\s*.*$'
+
+          if re.search(pattern, text):
+              text = re.sub(
+                  pattern,
+                  r'\1 com.alightcreative.motion.personal',
+                  text
+              )
+          else:
+              text += "\nrenameManifestPackage: com.alightcreative.motion.personal\n"
+
+          yml.write_text(text)
+
+          manifest = Path("decoded/AndroidManifest.xml")
+          s = manifest.read_text()
+
+          s = re.sub(
+              r'(<application\b[^>]*?\bandroid:label=)"[^"]*"',
+              r'\1"Alight Motion Custom"',
+              s,
+              count=1
+          )
+
+          s = s.replace(
+              "com.alightcreative.motion.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+              "com.alightcreative.motion.personal.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+          )
+
+          s = s.replace(
+              "com.alightcreative.app.motion.fileprovider",
+              "com.alightcreative.app.motion.personal.fileprovider"
+          )
+
+          manifest.write_text(s)
+          PY
+
+      - name: Add custom effects
         run: |
-          unzip -l Alight.Motion.patched-unsigned.apk | grep 'assets/effects/invert-flash.xml'
-          unzip -l Alight.Motion.patched-unsigned.apk | grep 'assets/effects/gradient-map.xml'
-          unzip -l Alight.Motion.patched-unsigned.apk | grep 'assets/effects/tv-simulator.xml'
-          unzip -p Alight.Motion.patched-unsigned.apk assets/effects/invert-flash.xml | grep -F 'Invert Flash'
-          unzip -p Alight.Motion.patched-unsigned.apk assets/effects/gradient-map.xml | grep -F 'Gradient Map'
-          unzip -p Alight.Motion.patched-unsigned.apk assets/effects/tv-simulator.xml | grep -F 'TV Simulator'
+          cp patch/effects/invert-flash.xml \
+            decoded/assets/effects/invert-flash.xml
 
-      - name: Align and sign APK
+          cp patch/effects/gradient-map.xml \
+            decoded/assets/effects/gradient-map.xml
+
+          cp patch/effects/tv-simulator.xml \
+            decoded/assets/effects/tv-simulator.xml
+
+      - name: Build APK
+        run: |
+          java -jar apktool.jar b \
+            decoded \
+            -o Alight.Motion.Custom-unsigned.apk
+
+      - name: Sign APK
         shell: bash
         run: |
-          set -e
-          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
-          echo "Using build tools: $BUILD_TOOLS"
-          keytool -genkeypair -v \
+          BUILD_TOOLS="$(
+            find "$ANDROID_HOME/build-tools" \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d |
+            sort -V |
+            tail -1
+          )"
+
+          keytool -genkeypair \
             -keystore patch.keystore \
             -storepass android \
             -keypass android \
@@ -66,27 +127,49 @@ jobs:
             -keyalg RSA \
             -keysize 2048 \
             -validity 10000 \
-            -dname "CN=Personal Patch, OU=Local, O=Local, L=Local, S=Local, C=US"
-          "$BUILD_TOOLS/zipalign" -f -p 4 Alight.Motion.patched-unsigned.apk Alight.Motion.patched-aligned.apk
+            -dname "CN=Personal Patch"
+
+          "$BUILD_TOOLS/zipalign" \
+            -f -p 4 \
+            Alight.Motion.Custom-unsigned.apk \
+            Alight.Motion.Custom-aligned.apk
+
           "$BUILD_TOOLS/apksigner" sign \
             --ks patch.keystore \
             --ks-pass pass:android \
             --key-pass pass:android \
-            --out Alight.Motion.patched.apk \
-            Alight.Motion.patched-aligned.apk
-          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs Alight.Motion.patched.apk
+            --out Alight.Motion.Custom.apk \
+            Alight.Motion.Custom-aligned.apk
 
-      - name: Final integrity check
+          "$BUILD_TOOLS/apksigner" verify \
+            --verbose \
+            Alight.Motion.Custom.apk
+
+      - name: Verify package and effects
         run: |
-          unzip -tq Alight.Motion.patched.apk
-          unzip -l Alight.Motion.patched.apk | grep 'assets/effects/invert-flash.xml'
-          unzip -l Alight.Motion.patched.apk | grep 'assets/effects/gradient-map.xml'
-          unzip -l Alight.Motion.patched.apk | grep 'assets/effects/tv-simulator.xml'
-          sha256sum Alight.Motion.patched.apk
+          java -jar apktool.jar d \
+            -f -s \
+            Alight.Motion.Custom.apk \
+            -o verify
 
-      - name: Upload patched APK
+          grep -m1 \
+            'package="com.alightcreative.motion.personal"' \
+            verify/AndroidManifest.xml
+
+          unzip -l Alight.Motion.Custom.apk |
+            grep 'assets/effects/invert-flash.xml'
+
+          unzip -l Alight.Motion.Custom.apk |
+            grep 'assets/effects/gradient-map.xml'
+
+          unzip -l Alight.Motion.Custom.apk |
+            grep 'assets/effects/tv-simulator.xml'
+
+          unzip -tq Alight.Motion.Custom.apk
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: alight-motion-patched-apk
-          path: Alight.Motion.patched.apk
+          name: alight-motion-custom-side-by-side
+          path: Alight.Motion.Custom.apk
           retention-days: 3
