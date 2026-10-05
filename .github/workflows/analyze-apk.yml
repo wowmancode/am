@@ -1,0 +1,74 @@
+name: Analyze Alight Motion APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/analyze-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download APK from private release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download am --repo "$GITHUB_REPOSITORY" --pattern 'Alight.Motion.apk' --clobber
+
+      - name: Install analysis tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apktool unzip binutils file
+
+      - name: Decode APK
+        run: apktool d -f Alight.Motion.apk -o decoded
+
+      - name: Build report
+        shell: bash
+        run: |
+          set -u
+          mkdir -p report
+          {
+            echo '=== APK INFO ==='
+            ls -lh Alight.Motion.apk
+            sha256sum Alight.Motion.apk
+            echo
+            echo '=== APKTOOL YAML ==='
+            sed -n '1,160p' decoded/apktool.yml || true
+            echo
+            echo '=== MANIFEST HEAD ==='
+            sed -n '1,240p' decoded/AndroidManifest.xml || true
+            echo
+            echo '=== TOP-LEVEL DECODED TREE ==='
+            find decoded -maxdepth 3 -type d | sort | head -400
+            echo
+            echo '=== SHADER / EFFECT-LIKE FILES ==='
+            find decoded -type f \( -iname '*.glsl' -o -iname '*.frag' -o -iname '*.vert' -o -iname '*.fsh' -o -iname '*.vsh' -o -iname '*shader*' -o -iname '*effect*' -o -iname '*filter*' \) | sort | head -2000
+            echo
+            echo '=== RELEVANT TEXT HITS ==='
+            grep -RInaE --binary-files=without-match 'fragment shader|vertex shader|GL_FRAGMENT_SHADER|gl_FragColor|sampler2D|gradient.?map|invert|effect|filter|shader' decoded/assets decoded/res decoded/smali* 2>/dev/null | head -4000 || true
+            echo
+            echo '=== NATIVE LIBRARIES ==='
+            find decoded/lib -type f -name '*.so' -print 2>/dev/null | sort || true
+          } > report/analysis.txt
+
+          find decoded/lib -type f -name '*.so' -print0 2>/dev/null | while IFS= read -r -d '' so; do
+            echo "===== $so =====" >> report/native-strings.txt
+            strings "$so" | grep -Ei 'shader|glsl|effect|filter|gradient|invert|OpenGL|Vulkan|sampler2D|frag' | head -500 >> report/native-strings.txt || true
+          done
+
+          find decoded/assets decoded/res -type f -size -512k 2>/dev/null | grep -Ei 'effect|filter|shader|preset|color|gradient' | head -1000 > report/candidate-files.txt || true
+
+      - name: Upload analysis report
+        uses: actions/upload-artifact@v4
+        with:
+          name: alight-motion-analysis
+          path: report/
+          retention-days: 3
