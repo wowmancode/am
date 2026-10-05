@@ -228,6 +228,7 @@ jobs:
 
           name_attr = f"{{{android_ns}}}name"
           target_attr = f"{{{android_ns}}}targetActivity"
+          authorities_attr = f"{{{android_ns}}}authorities"
 
           component_tags = {
               "activity",
@@ -240,6 +241,16 @@ jobs:
           }
 
           changed_names = 0
+          authority_replacements = {}
+
+          def rename_authority(authority):
+              if authority == NEW or authority.startswith(NEW + "."):
+                  return authority
+              if authority == OLD or authority.startswith(OLD + "."):
+                  return NEW + authority[len(OLD):]
+              if authority == "com.alightcreative.app.motion.fileprovider":
+                  return "com.alightcreative.app.motion.personal.fileprovider"
+              return authority
 
           for elem in root.iter():
 
@@ -263,6 +274,23 @@ jobs:
                   if value.startswith("."):
                       elem.attrib[target_attr] = OLD + value
                       changed_names += 1
+
+              if tag == "provider" and authorities_attr in elem.attrib:
+                  old_authorities = elem.attrib[authorities_attr]
+                  new_authorities = ";".join(
+                      rename_authority(authority)
+                      for authority in old_authorities.split(";")
+                  )
+
+                  if new_authorities != old_authorities:
+                      for old_authority, new_authority in zip(
+                          old_authorities.split(";"),
+                          new_authorities.split(";"),
+                      ):
+                          if old_authority != new_authority:
+                              authority_replacements[old_authority] = new_authority
+
+                      elem.attrib[authorities_attr] = new_authorities
 
           ET.register_namespace(
               "android",
@@ -324,6 +352,11 @@ jobs:
                   '"com.alightcreative.motion.personal.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"',
           }
 
+          replacements.update({
+              f'"{old_authority}"': f'"{new_authority}"'
+              for old_authority, new_authority in authority_replacements.items()
+          })
+
           changed_smali = 0
 
           for root_dir in Path("decoded-base").glob("smali*"):
@@ -366,6 +399,46 @@ jobs:
               "Smali literal files changed:",
               changed_smali
           )
+
+          print(
+              "Provider authorities renamed:",
+              len(authority_replacements)
+          )
+
+          for old_authority, new_authority in sorted(authority_replacements.items()):
+              print(
+                  "Provider authority:",
+                  old_authority,
+                  "->",
+                  new_authority
+              )
+
+          tree = ET.parse(manifest_path)
+          root = tree.getroot()
+
+          conflicting_authorities = []
+
+          for elem in root.iter():
+              if elem.tag.split("}")[-1] != "provider":
+                  continue
+
+              for authority in elem.attrib.get(authorities_attr, "").split(";"):
+                  in_old_namespace = (
+                      authority == OLD
+                      or authority.startswith(OLD + ".")
+                  ) and not (
+                      authority == NEW
+                      or authority.startswith(NEW + ".")
+                  )
+
+                  if in_old_namespace or authority == "com.alightcreative.app.motion.fileprovider":
+                      conflicting_authorities.append(authority)
+
+          if conflicting_authorities:
+              raise SystemExit(
+                  "ERROR: conflicting provider authorities remain: "
+                  + ", ".join(sorted(set(conflicting_authorities)))
+              )
 
           m = re.search(
               r'\bpackage="([^"]+)"',
