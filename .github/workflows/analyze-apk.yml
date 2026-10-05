@@ -45,7 +45,7 @@ jobs:
             sed -n '1,240p' decoded/AndroidManifest.xml || true
             echo
             echo '=== TOP-LEVEL DECODED TREE ==='
-            find decoded -maxdepth 3 -type d | sort | head -400
+            find decoded -maxdepth 3 -type d | sort | head -400 || true
             echo
             echo '=== SHADER / EFFECT-LIKE FILES ==='
             find decoded -type f \( -iname '*.glsl' -o -iname '*.frag' -o -iname '*.vert' -o -iname '*.fsh' -o -iname '*.vsh' -o -iname '*shader*' -o -iname '*effect*' -o -iname '*filter*' \) | sort | head -2000
