@@ -70,3 +70,15 @@ jobs:
           name: alight-motion-analysis
           path: report/
           retention-days: 3
+
+      - name: Upload decoded candidates
+        uses: actions/upload-artifact@v4
+        with:
+          name: alight-motion-decoded-candidates
+          path: |
+            decoded/assets/
+            decoded/res/
+            decoded/lib/
+            decoded/smali*/com/alightcreative/
+          retention-days: 1
+          if-no-files-found: warn
