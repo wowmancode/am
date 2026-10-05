@@ -242,6 +242,33 @@ jobs:
 
           changed_names = 0
           authority_replacements = {}
+          permission_replacements = {}
+
+          # App-defined permissions must be unique too. If the clone keeps
+          # the original permission names, Android can treat them as owned by
+          # the official app's different signing certificate.
+          for elem in root.iter():
+              tag = elem.tag.split("}")[-1]
+              if tag not in {"permission", "permission-tree", "permission-group"}:
+                  continue
+              value = elem.attrib.get(name_attr)
+              if value == OLD or (value and value.startswith(OLD + ".")):
+                  new_value = NEW + value[len(OLD):]
+                  permission_replacements[value] = new_value
+                  elem.attrib[name_attr] = new_value
+
+          # Update every manifest reference to an app-defined permission.
+          permission_attrs = [
+              name_attr,
+              f"{{{android_ns}}}permission",
+              f"{{{android_ns}}}readPermission",
+              f"{{{android_ns}}}writePermission",
+          ]
+          for elem in root.iter():
+              for attr in permission_attrs:
+                  value = elem.attrib.get(attr)
+                  if value in permission_replacements:
+                      elem.attrib[attr] = permission_replacements[value]
 
           def rename_authority(authority):
               if authority == NEW or authority.startswith(NEW + "."):
@@ -357,6 +384,11 @@ jobs:
               for old_authority, new_authority in authority_replacements.items()
           })
 
+          replacements.update({
+              f'"{old_permission}"': f'"{new_permission}"'
+              for old_permission, new_permission in permission_replacements.items()
+          })
+
           changed_smali = 0
 
           for root_dir in Path("decoded-base").glob("smali*"):
@@ -404,6 +436,19 @@ jobs:
               "Provider authorities renamed:",
               len(authority_replacements)
           )
+
+          print(
+              "App-defined permissions renamed:",
+              len(permission_replacements)
+          )
+
+          for old_permission, new_permission in sorted(permission_replacements.items()):
+              print(
+                  "Permission:",
+                  old_permission,
+                  "->",
+                  new_permission
+              )
 
           for old_authority, new_authority in sorted(authority_replacements.items()):
               print(
@@ -799,20 +844,53 @@ jobs:
 
           done
 
-      - name: Create signing key
+      - name: Prepare clone signing key
+        env:
+          PATCH_KEYSTORE_B64: ${{ secrets.PATCH_KEYSTORE_B64 }}
+          PATCH_KEYSTORE_PASSWORD: ${{ secrets.PATCH_KEYSTORE_PASSWORD }}
+          PATCH_KEY_PASSWORD: ${{ secrets.PATCH_KEY_PASSWORD }}
+          PATCH_KEY_ALIAS: ${{ secrets.PATCH_KEY_ALIAS }}
         run: |
           set -e
 
-          keytool \
-            -genkeypair \
+          if [ -n "$PATCH_KEYSTORE_B64" ]; then
+            echo "$PATCH_KEYSTORE_B64" | base64 -d > patch.keystore
+
+            : "${PATCH_KEYSTORE_PASSWORD:?PATCH_KEYSTORE_PASSWORD secret is required when PATCH_KEYSTORE_B64 is set}"
+            : "${PATCH_KEY_ALIAS:?PATCH_KEY_ALIAS secret is required when PATCH_KEYSTORE_B64 is set}"
+
+            if [ -z "$PATCH_KEY_PASSWORD" ]; then
+              PATCH_KEY_PASSWORD="$PATCH_KEYSTORE_PASSWORD"
+            fi
+
+            echo "Using persistent clone signing key from GitHub Secrets."
+          else
+            echo "::warning::No PATCH_KEYSTORE_B64 secret is configured. Generating an ephemeral key; builds signed this way cannot update one another without uninstalling the previous clone."
+
+            PATCH_KEYSTORE_PASSWORD="android"
+            PATCH_KEY_PASSWORD="android"
+            PATCH_KEY_ALIAS="patch"
+
+            keytool \
+              -genkeypair \
+              -keystore patch.keystore \
+              -storepass "$PATCH_KEYSTORE_PASSWORD" \
+              -keypass "$PATCH_KEY_PASSWORD" \
+              -alias "$PATCH_KEY_ALIAS" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Alight Motion Personal Clone"
+          fi
+
+          echo "PATCH_KEYSTORE_PASSWORD=$PATCH_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "PATCH_KEY_PASSWORD=$PATCH_KEY_PASSWORD" >> "$GITHUB_ENV"
+          echo "PATCH_KEY_ALIAS=$PATCH_KEY_ALIAS" >> "$GITHUB_ENV"
+
+          keytool -list \
             -keystore patch.keystore \
-            -storepass android \
-            -keypass android \
-            -alias patch \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Personal Patch"
+            -storepass "$PATCH_KEYSTORE_PASSWORD" \
+            -alias "$PATCH_KEY_ALIAS"
 
       - name: Align and sign all APKs
         shell: bash
@@ -843,8 +921,9 @@ jobs:
 
             "$BUILD_TOOLS/apksigner" sign \
               --ks patch.keystore \
-              --ks-pass pass:android \
-              --key-pass pass:android \
+              --ks-key-alias "$PATCH_KEY_ALIAS" \
+              --ks-pass "pass:$PATCH_KEYSTORE_PASSWORD" \
+              --key-pass "pass:$PATCH_KEY_PASSWORD" \
               --min-sdk-version "$BASE_MIN_SDK" \
               --v1-signing-enabled false \
               --v2-signing-enabled true \
