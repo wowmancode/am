@@ -96,6 +96,24 @@ jobs:
 
           "$BUILD_TOOLS/aapt2" version
 
+          BADGING="$("$BUILD_TOOLS/aapt2" dump badging base.apk | head -1)"
+
+          BASE_VERSION_CODE="$(
+            printf '%s\n' "$BADGING" |
+            sed -n "s/.*versionCode='\([^']*\)'.*/\1/p"
+          )"
+
+          BASE_VERSION_NAME="$(
+            printf '%s\n' "$BADGING" |
+            sed -n "s/.*versionName='\([^']*\)'.*/\1/p"
+          )"
+
+          echo "BASE_VERSION_CODE=$BASE_VERSION_CODE" >> "$GITHUB_ENV"
+          echo "BASE_VERSION_NAME=$BASE_VERSION_NAME" >> "$GITHUB_ENV"
+
+          echo "Base versionCode: $BASE_VERSION_CODE"
+          echo "Base versionName: $BASE_VERSION_NAME"
+
       - name: Decode base APK
         run: |
           set -e
@@ -485,7 +503,9 @@ jobs:
               -I "$ANDROID_PLATFORM/android.jar" \
               --manifest "$SOURCE" \
               --min-sdk-version 24 \
-              --target-sdk-version 36
+              --target-sdk-version 36 \
+              --version-code "$BASE_VERSION_CODE" \
+              --version-name "$BASE_VERSION_NAME"
 
             unzip -p \
               "$TEMP_APK" \
