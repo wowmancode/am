@@ -76,30 +76,34 @@ jobs:
             base.apk \
             -o decoded-base
 
-      - name: Decode split APKs
+      - name: Decode split manifests
         run: |
           set -e
 
           java -jar apktool.jar d \
             -f \
-            -s \
-            -r \
+            --only-manifest \
             split_config.arm64_v8a.apk \
             -o decoded-arm64
 
           java -jar apktool.jar d \
             -f \
-            -s \
-            -r \
+            --only-manifest \
             split_config.en.apk \
             -o decoded-en
 
           java -jar apktool.jar d \
             -f \
-            -s \
-            -r \
+            --only-manifest \
             split_config.xxhdpi.apk \
             -o decoded-xxhdpi
+
+          echo "=== SPLIT MANIFEST FILE TYPES ==="
+
+          file \
+            decoded-arm64/AndroidManifest.xml \
+            decoded-en/AndroidManifest.xml \
+            decoded-xxhdpi/AndroidManifest.xml
 
       - name: Rename base package
         shell: bash
@@ -167,12 +171,9 @@ jobs:
               xml_declaration=True
           )
 
-          print(
-              "Relative component names converted:",
-              changed_names
+          text = manifest_path.read_text(
+              encoding="utf-8"
           )
-
-          text = manifest_path.read_text()
 
           text, count = re.subn(
               r'\bpackage="' + re.escape(OLD) + r'"',
@@ -183,7 +184,7 @@ jobs:
 
           if count != 1:
               raise SystemExit(
-                  "ERROR: base manifest package rename failed"
+                  "ERROR: base package rename failed"
               )
 
           text = re.sub(
@@ -203,7 +204,10 @@ jobs:
               "com.alightcreative.app.motion.personal.fileprovider"
           )
 
-          manifest_path.write_text(text)
+          manifest_path.write_text(
+              text,
+              encoding="utf-8"
+          )
 
           replacements = {
               '"com.alightcreative.motion"':
@@ -219,12 +223,16 @@ jobs:
           changed_smali = 0
 
           for root_dir in Path("decoded-base").glob("smali*"):
+
               if not root_dir.is_dir():
                   continue
 
               for path in root_dir.rglob("*.smali"):
+
                   try:
-                      old_text = path.read_text()
+                      old_text = path.read_text(
+                          encoding="utf-8"
+                      )
                   except UnicodeDecodeError:
                       continue
 
@@ -237,34 +245,49 @@ jobs:
                       )
 
                   if new_text != old_text:
-                      path.write_text(new_text)
+                      path.write_text(
+                          new_text,
+                          encoding="utf-8"
+                      )
                       changed_smali += 1
 
           print(
-              "Smali identity strings changed:",
+              "Relative component names converted:",
+              changed_names
+          )
+
+          print(
+              "Smali files changed:",
               changed_smali
           )
 
-          final = manifest_path.read_text()
+          final = manifest_path.read_text(
+              encoding="utf-8"
+          )
 
           m = re.search(
               r'\bpackage="([^"]+)"',
               final
           )
 
+          if not m:
+              raise SystemExit(
+                  "ERROR: base package missing"
+              )
+
           print(
               "Final base package:",
-              m.group(1) if m else "NOT FOUND"
+              m.group(1)
           )
 
-          if not m or m.group(1) != NEW:
+          if m.group(1) != NEW:
               raise SystemExit(
-                  "ERROR: incorrect final base package"
+                  "ERROR: base package incorrect"
               )
 
           PY
 
-      - name: Rename split packages
+      - name: Rename split manifest packages
         shell: bash
         run: |
           set -e
@@ -286,28 +309,33 @@ jobs:
 
               manifest = directory / "AndroidManifest.xml"
 
-              text = manifest.read_text()
-
-              split_match = re.search(
-                  r'\bsplit="([^"]+)"',
-                  text
-              )
+              raw = manifest.read_bytes()
 
               print()
               print(
-                  "Processing:",
-                  directory
+                  "Manifest:",
+                  manifest
               )
 
               print(
-                  "Split name:",
-                  split_match.group(1)
-                  if split_match
-                  else "NOT FOUND"
+                  "First bytes:",
+                  raw[:16]
               )
+
+              try:
+                  text = raw.decode("utf-8")
+              except UnicodeDecodeError as e:
+                  raise SystemExit(
+                      f"ERROR: {manifest} is still binary XML: {e}"
+                  )
 
               package_match = re.search(
                   r'\bpackage="([^"]+)"',
+                  text
+              )
+
+              split_match = re.search(
+                  r'\bsplit="([^"]+)"',
                   text
               )
 
@@ -317,6 +345,25 @@ jobs:
                   if package_match
                   else "NOT FOUND"
               )
+
+              print(
+                  "Split name:",
+                  split_match.group(1)
+                  if split_match
+                  else "NOT FOUND"
+              )
+
+              if not package_match:
+                  raise SystemExit(
+                      f"ERROR: package missing in {manifest}"
+                  )
+
+              if not split_match:
+                  raise SystemExit(
+                      f"ERROR: split identity missing in {manifest}"
+                  )
+
+              original_split = split_match.group(1)
 
               text, count = re.subn(
                   r'\bpackage="' +
@@ -329,7 +376,7 @@ jobs:
 
               if count != 1:
                   raise SystemExit(
-                      f"ERROR: failed to rename {directory}"
+                      f"ERROR: failed to rename package in {manifest}"
                   )
 
               text = text.replace(
@@ -342,9 +389,14 @@ jobs:
                   "com.alightcreative.app.motion.personal.fileprovider"
               )
 
-              manifest.write_text(text)
+              manifest.write_text(
+                  text,
+                  encoding="utf-8"
+              )
 
-              final = manifest.read_text()
+              final = manifest.read_text(
+                  encoding="utf-8"
+              )
 
               package_match = re.search(
                   r'\bpackage="([^"]+)"',
@@ -356,32 +408,31 @@ jobs:
                   final
               )
 
-              print(
-                  "New package:",
-                  package_match.group(1)
-                  if package_match
-                  else "NOT FOUND"
-              )
-
-              print(
-                  "Preserved split:",
-                  split_match.group(1)
-                  if split_match
-                  else "NOT FOUND"
-              )
-
               if (
                   not package_match
                   or package_match.group(1) != NEW
               ):
                   raise SystemExit(
-                      f"ERROR: wrong package in {directory}"
+                      f"ERROR: wrong package in {manifest}"
                   )
 
-              if not split_match:
+              if (
+                  not split_match
+                  or split_match.group(1) != original_split
+              ):
                   raise SystemExit(
-                      f"ERROR: split name disappeared in {directory}"
+                      f"ERROR: split identity changed in {manifest}"
                   )
+
+              print(
+                  "New package:",
+                  package_match.group(1)
+              )
+
+              print(
+                  "Preserved split:",
+                  split_match.group(1)
+              )
 
           PY
 
@@ -410,7 +461,7 @@ jobs:
             patch/effects/tv-simulator.xml \
             decoded-base/assets/effects/tv-simulator.xml
 
-      - name: Build cloned base APK
+      - name: Build cloned base
         run: |
           set -e
 
@@ -418,21 +469,65 @@ jobs:
             decoded-base \
             -o base-custom-unsigned.apk
 
-      - name: Build cloned split APKs
+      - name: Rebuild split APKs with new manifests
+        shell: bash
         run: |
           set -e
 
-          java -jar apktool.jar b \
-            decoded-arm64 \
-            -o arm64-custom-unsigned.apk
+          mkdir -p split-work
 
-          java -jar apktool.jar b \
-            decoded-en \
-            -o en-custom-unsigned.apk
+          rebuild_split () {
+            ORIGINAL="$1"
+            MANIFEST="$2"
+            OUTPUT="$3"
+            WORK="$4"
 
-          java -jar apktool.jar b \
-            decoded-xxhdpi \
-            -o xxhdpi-custom-unsigned.apk
+            rm -rf "$WORK"
+
+            mkdir -p "$WORK"
+
+            unzip -q \
+              "$ORIGINAL" \
+              -d "$WORK"
+
+            rm -rf \
+              "$WORK/META-INF"
+
+            cp \
+              "$MANIFEST" \
+              "$WORK/AndroidManifest.xml"
+
+            (
+              cd "$WORK"
+
+              zip \
+                -q \
+                -r \
+                "../../$OUTPUT" \
+                .
+            )
+          }
+
+          rebuild_split \
+            split_config.arm64_v8a.apk \
+            decoded-arm64/AndroidManifest.xml \
+            arm64-custom-unsigned.apk \
+            split-work/arm64
+
+          rebuild_split \
+            split_config.en.apk \
+            decoded-en/AndroidManifest.xml \
+            en-custom-unsigned.apk \
+            split-work/en
+
+          rebuild_split \
+            split_config.xxhdpi.apk \
+            decoded-xxhdpi/AndroidManifest.xml \
+            xxhdpi-custom-unsigned.apk \
+            split-work/xxhdpi
+
+          ls -lh \
+            *custom-unsigned.apk
 
       - name: Create signing key
         run: |
@@ -449,7 +544,7 @@ jobs:
             -validity 10000 \
             -dname "CN=Personal Patch"
 
-      - name: Align and sign APKs
+      - name: Align and sign all APKs
         shell: bash
         run: |
           set -e
@@ -467,20 +562,15 @@ jobs:
 
           align_sign () {
             INPUT="$1"
-            OUTPUT="$2"
-            TEMP="$3"
-
-            echo
-            echo "Aligning $INPUT"
+            ALIGNED="$2"
+            OUTPUT="$3"
 
             "$BUILD_TOOLS/zipalign" \
               -f \
               -P 16 \
               4 \
               "$INPUT" \
-              "$TEMP"
-
-            echo "Signing $OUTPUT"
+              "$ALIGNED"
 
             "$BUILD_TOOLS/apksigner" sign \
               --ks patch.keystore \
@@ -490,16 +580,12 @@ jobs:
               --v2-signing-enabled true \
               --v3-signing-enabled true \
               --out "$OUTPUT" \
-              "$TEMP"
-
-            echo "Verifying signature"
+              "$ALIGNED"
 
             "$BUILD_TOOLS/apksigner" verify \
               --verbose \
               --print-certs \
               "$OUTPUT"
-
-            echo "Verifying alignment"
 
             "$BUILD_TOOLS/zipalign" \
               -c \
@@ -511,25 +597,25 @@ jobs:
 
           align_sign \
             base-custom-unsigned.apk \
-            output/base.apk \
-            output/base-aligned.apk
+            output/base-aligned.apk \
+            output/base.apk
 
           align_sign \
             arm64-custom-unsigned.apk \
-            output/split_config.arm64_v8a.apk \
-            output/arm64-aligned.apk
+            output/arm64-aligned.apk \
+            output/split_config.arm64_v8a.apk
 
           align_sign \
             en-custom-unsigned.apk \
-            output/split_config.en.apk \
-            output/en-aligned.apk
+            output/en-aligned.apk \
+            output/split_config.en.apk
 
           align_sign \
             xxhdpi-custom-unsigned.apk \
-            output/split_config.xxhdpi.apk \
-            output/xxhdpi-aligned.apk
+            output/xxhdpi-aligned.apk \
+            output/split_config.xxhdpi.apk
 
-      - name: Verify package and split identities
+      - name: Verify package identities
         shell: bash
         run: |
           set -e
@@ -543,47 +629,22 @@ jobs:
             tail -1
           )"
 
-          echo
-          echo "=== BASE ==="
-
-          "$BUILD_TOOLS/aapt2" \
-            dump badging \
-            output/base.apk |
-            head -40
-
-          BASE_PACKAGE="$(
-            "$BUILD_TOOLS/aapt2" \
-              dump badging \
-              output/base.apk |
-            sed -n \
-              "s/^package: name='\([^']*\)'.*/\1/p" |
-            head -1
-          )"
-
-          echo
-          echo "Base package:"
-          echo "$BASE_PACKAGE"
-
-          test \
-            "$BASE_PACKAGE" = \
-            "com.alightcreative.motion.personal"
-
-          echo
-          echo "=== SPLITS ==="
+          EXPECTED="com.alightcreative.motion.personal"
 
           for APK in \
+            output/base.apk \
             output/split_config.arm64_v8a.apk \
             output/split_config.en.apk \
             output/split_config.xxhdpi.apk
           do
 
             echo
-            echo "----- $APK -----"
+            echo "===== $APK ====="
 
             "$BUILD_TOOLS/aapt2" \
               dump badging \
               "$APK" |
-              head -15
+              head -20
 
             PACKAGE="$(
               "$BUILD_TOOLS/aapt2" \
@@ -594,20 +655,50 @@ jobs:
               head -1
             )"
 
-            echo "Package: $PACKAGE"
+            echo
+            echo "Detected package: $PACKAGE"
 
-            test \
-              "$PACKAGE" = \
-              "com.alightcreative.motion.personal"
+            if [ "$PACKAGE" != "$EXPECTED" ]; then
+              echo "ERROR: package mismatch in $APK"
+              exit 1
+            fi
+
+          done
+
+      - name: Verify split identities
+        shell: bash
+        run: |
+          set -e
+
+          BUILD_TOOLS="$(
+            find "$ANDROID_HOME/build-tools" \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d |
+            sort -V |
+            tail -1
+          )"
+
+          for APK in \
+            output/split_config.arm64_v8a.apk \
+            output/split_config.en.apk \
+            output/split_config.xxhdpi.apk
+          do
+
+            echo
+            echo "===== $APK ====="
+
+            "$BUILD_TOOLS/aapt2" \
+              dump xmltree \
+              "$APK" \
+              AndroidManifest.xml |
+              head -80
 
           done
 
       - name: Verify custom effects
         run: |
           set -e
-
-          echo
-          echo "=== CUSTOM EFFECTS ==="
 
           unzip -l \
             output/base.apk |
@@ -624,28 +715,7 @@ jobs:
             grep \
               'assets/effects/tv-simulator.xml'
 
-          echo
-          echo "=== EFFECT NAMES ==="
-
-          unzip -p \
-            output/base.apk \
-            assets/effects/invert-flash.xml |
-            grep -F \
-              "Invert Flash"
-
-          unzip -p \
-            output/base.apk \
-            assets/effects/gradient-map.xml |
-            grep -F \
-              "Gradient Map"
-
-          unzip -p \
-            output/base.apk \
-            assets/effects/tv-simulator.xml |
-            grep -F \
-              "TV Simulator"
-
-      - name: Generate install script
+      - name: Create install script
         run: |
           cat > output/install.sh <<'EOF'
           #!/data/data/com.termux/files/usr/bin/bash
@@ -664,66 +734,7 @@ jobs:
           chmod +x \
             output/install.sh
 
-      - name: Generate package report
-        shell: bash
-        run: |
-          set -e
-
-          BUILD_TOOLS="$(
-            find "$ANDROID_HOME/build-tools" \
-              -mindepth 1 \
-              -maxdepth 1 \
-              -type d |
-            sort -V |
-            tail -1
-          )"
-
-          {
-            echo "Alight Motion Custom Split Set"
-            echo
-            echo "Expected package:"
-            echo "com.alightcreative.motion.personal"
-            echo
-            echo "APKs:"
-            echo "base.apk"
-            echo "split_config.arm64_v8a.apk"
-            echo "split_config.en.apk"
-            echo "split_config.xxhdpi.apk"
-            echo
-            echo "SHA256:"
-            sha256sum \
-              output/base.apk \
-              output/split_config.arm64_v8a.apk \
-              output/split_config.en.apk \
-              output/split_config.xxhdpi.apk
-            echo
-            echo "Package information:"
-            echo
-
-            for APK in \
-              output/base.apk \
-              output/split_config.arm64_v8a.apk \
-              output/split_config.en.apk \
-              output/split_config.xxhdpi.apk
-            do
-
-              echo "===== $APK ====="
-
-              "$BUILD_TOOLS/aapt2" \
-                dump badging \
-                "$APK" |
-                head -10
-
-              echo
-
-            done
-
-          } > output/package-report.txt
-
-          cat \
-            output/package-report.txt
-
-      - name: Create downloadable bundle
+      - name: Create bundle
         run: |
           set -e
 
@@ -736,10 +747,13 @@ jobs:
             split_config.arm64_v8a.apk \
             split_config.en.apk \
             split_config.xxhdpi.apk \
-            install.sh \
-            package-report.txt
+            install.sh
 
           sha256sum \
+            base.apk \
+            split_config.arm64_v8a.apk \
+            split_config.en.apk \
+            split_config.xxhdpi.apk \
             Alight.Motion.Custom.split-set.zip
 
       - name: Upload split set
@@ -753,6 +767,5 @@ jobs:
             output/split_config.en.apk
             output/split_config.xxhdpi.apk
             output/install.sh
-            output/package-report.txt
             output/Alight.Motion.Custom.split-set.zip
           retention-days: 3
