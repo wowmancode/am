@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8' ?>
-<effect id="com.wowmancode.effects.invertflash" name="@string/name" desc="@string/desc" category="color" tags="color,glitch,raster,auto" thumb="thumb/invert.jpg">
+<effect id="com.wowmancode.effects.invertflash" name="@string/name" desc="@string/desc" category="color" tags="color,glitch,raster,auto" thumb="thumb/invert.webp">
     <strings>
         <locale lang="en">
             <string name="name">Invert Flash</string>
