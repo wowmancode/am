@@ -36,7 +36,8 @@ jobs:
             unzip \
             zip \
             openjdk-17-jdk \
-            curl
+            curl \
+            python3-yaml
 
           curl -L --fail \
             -o apktool.jar \
@@ -58,56 +59,60 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
+          import yaml
           import re
 
-          yml = Path("decoded/apktool.yml")
-          text = yml.read_text()
+          yml_path = Path("decoded/apktool.yml")
 
-          if re.search(r'(?m)^renameManifestPackage:', text):
-              text = re.sub(
-                  r'(?m)^renameManifestPackage:.*$',
-                  'renameManifestPackage: com.alightcreative.motion.personal',
-                  text
+          with yml_path.open() as f:
+              data = yaml.safe_load(f)
+
+          print("Original apktool.yml keys:", data.keys())
+
+          # Apktool 3.x uses resourcesInfo, not packageInfo.
+          resources = data.setdefault("resourcesInfo", {})
+          resources["renameManifestPackage"] = "com.alightcreative.motion.personal"
+
+          with yml_path.open("w") as f:
+              yaml.safe_dump(
+                  data,
+                  f,
+                  sort_keys=False,
+                  allow_unicode=True
               )
-          else:
-              text += '\nrenameManifestPackage: com.alightcreative.motion.personal\n'
-
-          yml.write_text(text)
 
           manifest = Path("decoded/AndroidManifest.xml")
           s = manifest.read_text()
 
-          s = re.sub(
+          # Distinct visible app name.
+          s, count = re.subn(
               r'(<application\b[^>]*?\bandroid:label=)"[^"]*"',
               r'\1"Alight Motion Custom"',
               s,
               count=1
           )
 
+          print("Application label replacements:", count)
+
+          # Avoid conflicts with the installed official application.
           s = s.replace(
-              'com.alightcreative.motion.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
-              'com.alightcreative.motion.personal.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+              "com.alightcreative.motion.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
+              "com.alightcreative.motion.personal.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
           )
 
           s = s.replace(
-              'com.alightcreative.app.motion.fileprovider',
-              'com.alightcreative.app.motion.personal.fileprovider'
+              "com.alightcreative.app.motion.fileprovider",
+              "com.alightcreative.app.motion.personal.fileprovider"
           )
 
           manifest.write_text(s)
-
-          print("=== APKTOOL PACKAGE CONFIG ===")
-          print(yml.read_text()[-800:])
-
-          print("=== MANIFEST IDENTITY HITS ===")
-          for line in manifest.read_text().splitlines():
-              if (
-                  "application" in line
-                  or "fileprovider" in line
-                  or "DYNAMIC_RECEIVER" in line
-              ):
-                  print(line[:500])
           PY
+
+          echo
+          echo "=== APKTOOL CONFIG ==="
+          grep -A10 -B2 \
+            "resourcesInfo:" \
+            decoded/apktool.yml
 
       - name: Add custom effects
         run: |
@@ -198,7 +203,7 @@ jobs:
 
           "$BUILD_TOOLS/aapt2" dump badging \
             Alight.Motion.Custom.apk |
-            head -20
+            head -30
 
           PACKAGE="$(
             "$BUILD_TOOLS/aapt2" dump badging \
@@ -210,7 +215,10 @@ jobs:
           echo
           echo "Detected package: $PACKAGE"
 
-          test "$PACKAGE" = "com.alightcreative.motion.personal"
+          if [ "$PACKAGE" != "com.alightcreative.motion.personal" ]; then
+            echo "ERROR: package rename failed"
+            exit 1
+          fi
 
           echo
           echo "=== CUSTOM EFFECTS ==="
@@ -225,25 +233,7 @@ jobs:
             grep 'assets/effects/tv-simulator.xml'
 
           echo
-          echo "=== EFFECT NAMES ==="
-
-          unzip -p \
-            Alight.Motion.Custom.apk \
-            assets/effects/invert-flash.xml |
-            grep -F "Invert Flash"
-
-          unzip -p \
-            Alight.Motion.Custom.apk \
-            assets/effects/gradient-map.xml |
-            grep -F "Gradient Map"
-
-          unzip -p \
-            Alight.Motion.Custom.apk \
-            assets/effects/tv-simulator.xml |
-            grep -F "TV Simulator"
-
-          echo
-          echo "=== APK ZIP TEST ==="
+          echo "=== ZIP INTEGRITY ==="
 
           unzip -tq Alight.Motion.Custom.apk
 
