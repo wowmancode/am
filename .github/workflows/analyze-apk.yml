@@ -3,8 +3,6 @@ name: Analyze Alight Motion APK
 on:
   push:
     branches: [main]
-    paths:
-      - '.github/workflows/analyze-apk.yml'
   workflow_dispatch:
 
 permissions:
