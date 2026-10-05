@@ -26,24 +26,33 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y apktool unzip zip openjdk-17-jdk
+          sudo apt-get install -y unzip zip openjdk-17-jdk
 
-      - name: Decode APK
-        run: apktool d -f Alight.Motion.apk -o decoded
-
-      - name: Inject custom effects
+      - name: Inject custom effect assets
+        shell: bash
         run: |
-          cp patch/effects/invert-flash.xml decoded/assets/effects/invert-flash.xml
-          cp patch/effects/gradient-map.xml decoded/assets/effects/gradient-map.xml
-          cp patch/effects/tv-simulator.xml decoded/assets/effects/tv-simulator.xml
-          test -f decoded/assets/effects/invert-flash.xml
-          test -f decoded/assets/effects/gradient-map.xml
-          test -f decoded/assets/effects/tv-simulator.xml
+          set -e
+          cp Alight.Motion.apk Alight.Motion.patched-unsigned.apk
+          mkdir -p inject/assets/effects
+          cp patch/effects/invert-flash.xml inject/assets/effects/
+          cp patch/effects/gradient-map.xml inject/assets/effects/
+          cp patch/effects/tv-simulator.xml inject/assets/effects/
+          cd inject
+          zip -q -u ../Alight.Motion.patched-unsigned.apk \
+            assets/effects/invert-flash.xml \
+            assets/effects/gradient-map.xml \
+            assets/effects/tv-simulator.xml
 
-      - name: Rebuild APK
-        run: apktool b decoded -o Alight.Motion.patched-unsigned.apk
+      - name: Verify injected effect assets
+        run: |
+          unzip -l Alight.Motion.patched-unsigned.apk | grep 'assets/effects/invert-flash.xml'
+          unzip -l Alight.Motion.patched-unsigned.apk | grep 'assets/effects/gradient-map.xml'
+          unzip -l Alight.Motion.patched-unsigned.apk | grep 'assets/effects/tv-simulator.xml'
+          unzip -p Alight.Motion.patched-unsigned.apk assets/effects/invert-flash.xml | grep -F 'Invert Flash'
+          unzip -p Alight.Motion.patched-unsigned.apk assets/effects/gradient-map.xml | grep -F 'Gradient Map'
+          unzip -p Alight.Motion.patched-unsigned.apk assets/effects/tv-simulator.xml | grep -F 'TV Simulator'
 
-      - name: Sign APK
+      - name: Align and sign APK
         shell: bash
         run: |
           set -e
@@ -65,16 +74,15 @@ jobs:
             --key-pass pass:android \
             --out Alight.Motion.patched.apk \
             Alight.Motion.patched-aligned.apk
-          "$BUILD_TOOLS/apksigner" verify --verbose Alight.Motion.patched.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose --print-certs Alight.Motion.patched.apk
 
-      - name: Verify injected effects
+      - name: Final integrity check
         run: |
+          unzip -tq Alight.Motion.patched.apk
           unzip -l Alight.Motion.patched.apk | grep 'assets/effects/invert-flash.xml'
           unzip -l Alight.Motion.patched.apk | grep 'assets/effects/gradient-map.xml'
           unzip -l Alight.Motion.patched.apk | grep 'assets/effects/tv-simulator.xml'
-          unzip -p Alight.Motion.patched.apk assets/effects/invert-flash.xml | grep -F 'Invert Flash'
-          unzip -p Alight.Motion.patched.apk assets/effects/gradient-map.xml | grep -F 'Gradient Map'
-          unzip -p Alight.Motion.patched.apk assets/effects/tv-simulator.xml | grep -F 'TV Simulator'
+          sha256sum Alight.Motion.patched.apk
 
       - name: Upload patched APK
         uses: actions/upload-artifact@v4
