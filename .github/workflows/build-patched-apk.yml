@@ -784,30 +784,44 @@ jobs:
             grep \
               'assets/effects/tv-simulator.xml'
 
-      - name: Create Termux install script
-        run: |
-          cat > output/install.sh <<'EOF'
-          #!/data/data/com.termux/files/usr/bin/bash
-
-          set -e
-
-          cd "$(dirname "$0")"
-
-          adb install-multiple \
-            base.apk \
-            split_config.arm64_v8a.apk \
-            split_config.en.apk \
-            split_config.xxhdpi.apk
-          EOF
-
-          chmod +x \
-            output/install.sh
-
-      - name: Create split bundle
+    - name: Create split bundle
         run: |
           set -e
 
           cd output
 
           zip \
-       
+            -9 \
+            Alight.Motion.Custom.split-set.zip \
+            base.apk \
+            split_config.arm64_v8a.apk \
+            split_config.en.apk \
+            split_config.xxhdpi.apk \
+            install.sh
+
+          echo
+          echo "=== OUTPUT FILES ==="
+          ls -lh
+
+          echo
+          echo "=== SHA256 ==="
+          sha256sum \
+            base.apk \
+            split_config.arm64_v8a.apk \
+            split_config.en.apk \
+            split_config.xxhdpi.apk \
+            Alight.Motion.Custom.split-set.zip
+
+      - name: Upload split set
+        uses: actions/upload-artifact@v4
+        with:
+          name: alight-motion-custom-split-set
+          path: |
+            output/base.apk
+            output/split_config.arm64_v8a.apk
+            output/split_config.en.apk
+            output/split_config.xxhdpi.apk
+            output/install.sh
+            output/Alight.Motion.Custom.split-set.zip
+          if-no-files-found: error
+          retention-days: 3
