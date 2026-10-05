@@ -1,0 +1,84 @@
+name: Build Patched Alight Motion
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'patch/effects/**'
+      - '.github/workflows/build-patched-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download original APK
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download am --repo "$GITHUB_REPOSITORY" --pattern 'Alight.Motion.apk' --clobber
+
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y apktool unzip zip openjdk-17-jdk
+
+      - name: Decode APK
+        run: apktool d -f Alight.Motion.apk -o decoded
+
+      - name: Inject custom effects
+        run: |
+          cp patch/effects/invert-flash.xml decoded/assets/effects/invert-flash.xml
+          cp patch/effects/gradient-map.xml decoded/assets/effects/gradient-map.xml
+          cp patch/effects/tv-simulator.xml decoded/assets/effects/tv-simulator.xml
+          test -f decoded/assets/effects/invert-flash.xml
+          test -f decoded/assets/effects/gradient-map.xml
+          test -f decoded/assets/effects/tv-simulator.xml
+
+      - name: Rebuild APK
+        run: apktool b decoded -o Alight.Motion.patched-unsigned.apk
+
+      - name: Sign APK
+        shell: bash
+        run: |
+          set -e
+          BUILD_TOOLS="$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)"
+          echo "Using build tools: $BUILD_TOOLS"
+          keytool -genkeypair -v \
+            -keystore patch.keystore \
+            -storepass android \
+            -keypass android \
+            -alias patch \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -dname "CN=Personal Patch, OU=Local, O=Local, L=Local, S=Local, C=US"
+          "$BUILD_TOOLS/zipalign" -f -p 4 Alight.Motion.patched-unsigned.apk Alight.Motion.patched-aligned.apk
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks patch.keystore \
+            --ks-pass pass:android \
+            --key-pass pass:android \
+            --out Alight.Motion.patched.apk \
+            Alight.Motion.patched-aligned.apk
+          "$BUILD_TOOLS/apksigner" verify --verbose Alight.Motion.patched.apk
+
+      - name: Verify injected effects
+        run: |
+          unzip -l Alight.Motion.patched.apk | grep 'assets/effects/invert-flash.xml'
+          unzip -l Alight.Motion.patched.apk | grep 'assets/effects/gradient-map.xml'
+          unzip -l Alight.Motion.patched.apk | grep 'assets/effects/tv-simulator.xml'
+          unzip -p Alight.Motion.patched.apk assets/effects/invert-flash.xml | grep -F 'Invert Flash'
+          unzip -p Alight.Motion.patched.apk assets/effects/gradient-map.xml | grep -F 'Gradient Map'
+          unzip -p Alight.Motion.patched.apk assets/effects/tv-simulator.xml | grep -F 'TV Simulator'
+
+      - name: Upload patched APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: alight-motion-patched-apk
+          path: Alight.Motion.patched.apk
+          retention-days: 3
