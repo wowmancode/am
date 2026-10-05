@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8' ?>
-<effect id="com.wowmancode.effects.gradientmap" name="@string/name" desc="@string/desc" category="color" tags="color,colorGrading,lumaMap,raster" thumb="thumb/palmap.webp">
+<effect id="com.wowmancode.effects.gradientmap" name="@string/name" desc="@string/desc" category="color" tags="color,colorGrading,lumaMap,raster" thumb="thumb/palette_map.webp">
     <strings>
         <locale lang="en">
             <string name="name">Gradient Map</string>
