@@ -32,12 +32,12 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
+
           sudo apt-get install -y \
             unzip \
             zip \
-            openjdk-17-jdk \
             curl \
-            python3-yaml
+            openjdk-17-jdk
 
           curl -L --fail \
             -o apktool.jar \
@@ -59,66 +59,268 @@ jobs:
 
           python3 - <<'PY'
           from pathlib import Path
-          import yaml
           import re
+          import xml.etree.ElementTree as ET
 
-          yml_path = Path("decoded/apktool.yml")
+          OLD = "com.alightcreative.motion"
+          NEW = "com.alightcreative.motion.personal"
 
-          with yml_path.open() as f:
-              data = yaml.safe_load(f)
+          manifest_path = Path("decoded/AndroidManifest.xml")
 
-          print("Original apktool.yml keys:", data.keys())
+          text = manifest_path.read_text()
 
-          # Apktool 3.x uses resourcesInfo, not packageInfo.
-          resources = data.setdefault("resourcesInfo", {})
-          resources["renameManifestPackage"] = "com.alightcreative.motion.personal"
+          print("Original package:")
+          m = re.search(r'\bpackage="([^"]+)"', text)
+          print(m.group(1) if m else "NOT FOUND")
 
-          with yml_path.open("w") as f:
-              yaml.safe_dump(
-                  data,
-                  f,
-                  sort_keys=False,
-                  allow_unicode=True
+          # --------------------------------------------------
+          # 1. Preserve relative Android component class names.
+          #
+          # If manifest package changes:
+          #
+          #   android:name=".SomeActivity"
+          #
+          # would otherwise become:
+          #
+          #   com.alightcreative.motion.personal.SomeActivity
+          #
+          # But the real class is still:
+          #
+          #   com.alightcreative.motion.SomeActivity
+          #
+          # So convert relative component names to absolute
+          # original-package names BEFORE changing package.
+          # --------------------------------------------------
+
+          android_ns = "http://schemas.android.com/apk/res/android"
+
+          try:
+              tree = ET.parse(manifest_path)
+              root = tree.getroot()
+
+              name_attr = f"{{{android_ns}}}name"
+              target_attr = f"{{{android_ns}}}targetActivity"
+
+              component_tags = {
+                  "activity",
+                  "activity-alias",
+                  "service",
+                  "receiver",
+                  "provider",
+                  "application",
+                  "instrumentation",
+              }
+
+              changed_names = 0
+
+              for elem in root.iter():
+                  tag = elem.tag.split("}")[-1]
+
+                  if tag not in component_tags:
+                      continue
+
+                  if name_attr in elem.attrib:
+                      name = elem.attrib[name_attr]
+
+                      if name.startswith("."):
+                          elem.attrib[name_attr] = OLD + name
+                          changed_names += 1
+
+                  if target_attr in elem.attrib:
+                      name = elem.attrib[target_attr]
+
+                      if name.startswith("."):
+                          elem.attrib[target_attr] = OLD + name
+                          changed_names += 1
+
+              ET.register_namespace(
+                  "android",
+                  android_ns
               )
 
-          manifest = Path("decoded/AndroidManifest.xml")
-          s = manifest.read_text()
+              tree.write(
+                  manifest_path,
+                  encoding="utf-8",
+                  xml_declaration=True
+              )
 
-          # Distinct visible app name.
-          s, count = re.subn(
-              r'(<application\b[^>]*?\bandroid:label=)"[^"]*"',
-              r'\1"Alight Motion Custom"',
-              s,
+              print(
+                  "Relative component names converted:",
+                  changed_names
+              )
+
+          except Exception as e:
+              print(
+                  "XML parser failed, using regex fallback:",
+                  e
+              )
+
+          # Reload after XML modifications.
+          text = manifest_path.read_text()
+
+          # --------------------------------------------------
+          # 2. Change actual Android package/application ID.
+          # --------------------------------------------------
+
+          text, count = re.subn(
+              r'\bpackage="' + re.escape(OLD) + r'"',
+              f'package="{NEW}"',
+              text,
               count=1
           )
 
-          print("Application label replacements:", count)
+          if count != 1:
+              raise SystemExit(
+                  "ERROR: Failed to change manifest package"
+              )
 
-          # Avoid conflicts with the installed official application.
-          s = s.replace(
+          # --------------------------------------------------
+          # 3. Change visible application label.
+          # --------------------------------------------------
+
+          text, count = re.subn(
+              r'(<application\b[^>]*?\bandroid:label=)"[^"]*"',
+              r'\1"Alight Motion Custom"',
+              text,
+              count=1
+          )
+
+          print(
+              "Application label replacements:",
+              count
+          )
+
+          # --------------------------------------------------
+          # 4. Avoid permission/provider authority collisions
+          # with the official installed Alight Motion.
+          # --------------------------------------------------
+
+          text = text.replace(
               "com.alightcreative.motion.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
               "com.alightcreative.motion.personal.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
           )
 
-          s = s.replace(
+          text = text.replace(
               "com.alightcreative.app.motion.fileprovider",
               "com.alightcreative.app.motion.personal.fileprovider"
           )
 
-          manifest.write_text(s)
+          manifest_path.write_text(text)
+
+          # --------------------------------------------------
+          # 5. Update exact runtime identity strings in smali.
+          #
+          # Do NOT rename class descriptors or directories.
+          # We only replace literal strings that represent the
+          # app's own package/provider identity.
+          # --------------------------------------------------
+
+          literal_replacements = {
+              '"com.alightcreative.motion"':
+                  '"com.alightcreative.motion.personal"',
+
+              '"com.alightcreative.app.motion.fileprovider"':
+                  '"com.alightcreative.app.motion.personal.fileprovider"',
+
+              '"com.alightcreative.motion.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"':
+                  '"com.alightcreative.motion.personal.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"',
+          }
+
+          changed_smali = 0
+
+          for root in Path("decoded").glob("smali*"):
+
+              if not root.is_dir():
+                  continue
+
+              for path in root.rglob("*.smali"):
+
+                  try:
+                      old_text = path.read_text()
+                  except UnicodeDecodeError:
+                      continue
+
+                  new_text = old_text
+
+                  for old, new in literal_replacements.items():
+                      new_text = new_text.replace(
+                          old,
+                          new
+                      )
+
+                  if new_text != old_text:
+                      path.write_text(new_text)
+                      changed_smali += 1
+
+          print(
+              "Smali files with package identity literals changed:",
+              changed_smali
+          )
+
+          # --------------------------------------------------
+          # Show final manifest identity.
+          # --------------------------------------------------
+
+          final = manifest_path.read_text()
+
+          m = re.search(
+              r'\bpackage="([^"]+)"',
+              final
+          )
+
+          print(
+              "Final decoded manifest package:",
+              m.group(1) if m else "NOT FOUND"
+          )
+
+          if not m:
+              raise SystemExit(
+                  "ERROR: final manifest package missing"
+              )
+
+          if m.group(1) != NEW:
+              raise SystemExit(
+                  "ERROR: final manifest package incorrect"
+              )
+
           PY
 
           echo
-          echo "=== APKTOOL CONFIG ==="
-          grep -A10 -B2 \
-            "resourcesInfo:" \
-            decoded/apktool.yml
+          echo "=== DECODED MANIFEST PACKAGE ==="
+
+          grep -o \
+            'package="[^"]*"' \
+            decoded/AndroidManifest.xml |
+            head -1
+
+          echo
+          echo "=== CUSTOM LABEL ==="
+
+          grep -o \
+            'android:label="Alight Motion Custom"' \
+            decoded/AndroidManifest.xml |
+            head -1
+
+          echo
+          echo "=== CUSTOM PROVIDER ==="
+
+          grep -o \
+            'com.alightcreative.app.motion.personal.fileprovider' \
+            decoded/AndroidManifest.xml |
+            head -1
 
       - name: Add custom effects
         run: |
-          test -f patch/effects/invert-flash.xml
-          test -f patch/effects/gradient-map.xml
-          test -f patch/effects/tv-simulator.xml
+          set -e
+
+          test -f \
+            patch/effects/invert-flash.xml
+
+          test -f \
+            patch/effects/gradient-map.xml
+
+          test -f \
+            patch/effects/tv-simulator.xml
 
           cp \
             patch/effects/invert-flash.xml \
@@ -134,6 +336,8 @@ jobs:
 
       - name: Build APK
         run: |
+          set -e
+
           java -jar apktool.jar b \
             decoded \
             -o Alight.Motion.Custom-unsigned.apk
@@ -152,10 +356,11 @@ jobs:
             tail -1
           )"
 
-          echo "Using Android build tools:"
+          echo "Android build tools:"
           echo "$BUILD_TOOLS"
 
-          keytool -genkeypair \
+          keytool \
+            -genkeypair \
             -keystore patch.keystore \
             -storepass android \
             -keypass android \
@@ -179,6 +384,9 @@ jobs:
             --out Alight.Motion.Custom.apk \
             Alight.Motion.Custom-aligned.apk
 
+          echo
+          echo "=== SIGNATURE ==="
+
           "$BUILD_TOOLS/apksigner" verify \
             --verbose \
             --print-certs \
@@ -201,46 +409,104 @@ jobs:
           echo
           echo "=== PACKAGE INFO ==="
 
-          "$BUILD_TOOLS/aapt2" dump badging \
+          "$BUILD_TOOLS/aapt2" \
+            dump badging \
             Alight.Motion.Custom.apk |
-            head -30
+            head -40
 
           PACKAGE="$(
-            "$BUILD_TOOLS/aapt2" dump badging \
+            "$BUILD_TOOLS/aapt2" \
+              dump badging \
               Alight.Motion.Custom.apk |
-            sed -n "s/^package: name='\([^']*\)'.*/\1/p" |
+            sed -n \
+              "s/^package: name='\([^']*\)'.*/\1/p" |
             head -1
           )"
 
           echo
           echo "Detected package: $PACKAGE"
 
-          if [ "$PACKAGE" != "com.alightcreative.motion.personal" ]; then
+          if [
+            "$PACKAGE" !=
+            "com.alightcreative.motion.personal"
+          ]; then
+
+            echo
             echo "ERROR: package rename failed"
+
             exit 1
+
           fi
+
+          echo
+          echo "PACKAGE RENAME SUCCESS"
+
+          echo
+          echo "=== APP LABEL ==="
+
+          "$BUILD_TOOLS/aapt2" \
+            dump badging \
+            Alight.Motion.Custom.apk |
+            grep \
+              "application-label:'Alight Motion Custom'"
 
           echo
           echo "=== CUSTOM EFFECTS ==="
 
-          unzip -l Alight.Motion.Custom.apk |
-            grep 'assets/effects/invert-flash.xml'
+          unzip \
+            -l \
+            Alight.Motion.Custom.apk |
+            grep \
+              'assets/effects/invert-flash.xml'
 
-          unzip -l Alight.Motion.Custom.apk |
-            grep 'assets/effects/gradient-map.xml'
+          unzip \
+            -l \
+            Alight.Motion.Custom.apk |
+            grep \
+              'assets/effects/gradient-map.xml'
 
-          unzip -l Alight.Motion.Custom.apk |
-            grep 'assets/effects/tv-simulator.xml'
+          unzip \
+            -l \
+            Alight.Motion.Custom.apk |
+            grep \
+              'assets/effects/tv-simulator.xml'
 
           echo
-          echo "=== ZIP INTEGRITY ==="
+          echo "=== EFFECT NAME CHECK ==="
 
-          unzip -tq Alight.Motion.Custom.apk
+          unzip \
+            -p \
+            Alight.Motion.Custom.apk \
+            assets/effects/invert-flash.xml |
+            grep -F \
+              "Invert Flash"
+
+          unzip \
+            -p \
+            Alight.Motion.Custom.apk \
+            assets/effects/gradient-map.xml |
+            grep -F \
+              "Gradient Map"
+
+          unzip \
+            -p \
+            Alight.Motion.Custom.apk \
+            assets/effects/tv-simulator.xml |
+            grep -F \
+              "TV Simulator"
+
+          echo
+          echo "=== APK ZIP INTEGRITY ==="
+
+          unzip \
+            -tq \
+            Alight.Motion.Custom.apk
 
           echo
           echo "=== SHA256 ==="
 
-          sha256sum Alight.Motion.Custom.apk
+          sha256sum \
+            Alight.Motion.Custom.apk
 
       - name: Upload APK
         if: always()
