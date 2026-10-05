@@ -3,7 +3,8 @@ name: Build Side-by-Side Alight Motion
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - "patch/effects/**"
       - ".github/workflows/build-patched-apk.yml"
@@ -16,7 +17,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Download original APK
         env:
@@ -30,7 +32,11 @@ jobs:
       - name: Install tools
         run: |
           sudo apt-get update
-          sudo apt-get install -y unzip zip openjdk-17-jdk curl
+          sudo apt-get install -y \
+            unzip \
+            zip \
+            openjdk-17-jdk \
+            curl
 
           curl -L --fail \
             -o apktool.jar \
@@ -38,15 +44,18 @@ jobs:
 
           java -jar apktool.jar --version
 
-      - name: Decode
+      - name: Decode APK
         run: |
           java -jar apktool.jar d \
-            -f Alight.Motion.apk \
+            -f \
+            Alight.Motion.apk \
             -o decoded
 
       - name: Configure separate app identity
         shell: bash
         run: |
+          set -e
+
           python3 - <<'PY'
           from pathlib import Path
           import re
@@ -54,16 +63,14 @@ jobs:
           yml = Path("decoded/apktool.yml")
           text = yml.read_text()
 
-          pattern = r'(?m)^(\s*renameManifestPackage:)\s*.*$'
-
-          if re.search(pattern, text):
+          if re.search(r'(?m)^renameManifestPackage:', text):
               text = re.sub(
-                  pattern,
-                  r'\1 com.alightcreative.motion.personal',
+                  r'(?m)^renameManifestPackage:.*$',
+                  'renameManifestPackage: com.alightcreative.motion.personal',
                   text
               )
           else:
-              text += "\nrenameManifestPackage: com.alightcreative.motion.personal\n"
+              text += '\nrenameManifestPackage: com.alightcreative.motion.personal\n'
 
           yml.write_text(text)
 
@@ -78,27 +85,46 @@ jobs:
           )
 
           s = s.replace(
-              "com.alightcreative.motion.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
-              "com.alightcreative.motion.personal.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+              'com.alightcreative.motion.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION',
+              'com.alightcreative.motion.personal.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
           )
 
           s = s.replace(
-              "com.alightcreative.app.motion.fileprovider",
-              "com.alightcreative.app.motion.personal.fileprovider"
+              'com.alightcreative.app.motion.fileprovider',
+              'com.alightcreative.app.motion.personal.fileprovider'
           )
 
           manifest.write_text(s)
+
+          print("=== APKTOOL PACKAGE CONFIG ===")
+          print(yml.read_text()[-800:])
+
+          print("=== MANIFEST IDENTITY HITS ===")
+          for line in manifest.read_text().splitlines():
+              if (
+                  "application" in line
+                  or "fileprovider" in line
+                  or "DYNAMIC_RECEIVER" in line
+              ):
+                  print(line[:500])
           PY
 
       - name: Add custom effects
         run: |
-          cp patch/effects/invert-flash.xml \
+          test -f patch/effects/invert-flash.xml
+          test -f patch/effects/gradient-map.xml
+          test -f patch/effects/tv-simulator.xml
+
+          cp \
+            patch/effects/invert-flash.xml \
             decoded/assets/effects/invert-flash.xml
 
-          cp patch/effects/gradient-map.xml \
+          cp \
+            patch/effects/gradient-map.xml \
             decoded/assets/effects/gradient-map.xml
 
-          cp patch/effects/tv-simulator.xml \
+          cp \
+            patch/effects/tv-simulator.xml \
             decoded/assets/effects/tv-simulator.xml
 
       - name: Build APK
@@ -110,6 +136,8 @@ jobs:
       - name: Sign APK
         shell: bash
         run: |
+          set -e
+
           BUILD_TOOLS="$(
             find "$ANDROID_HOME/build-tools" \
               -mindepth 1 \
@@ -118,6 +146,9 @@ jobs:
             sort -V |
             tail -1
           )"
+
+          echo "Using Android build tools:"
+          echo "$BUILD_TOOLS"
 
           keytool -genkeypair \
             -keystore patch.keystore \
@@ -130,7 +161,9 @@ jobs:
             -dname "CN=Personal Patch"
 
           "$BUILD_TOOLS/zipalign" \
-            -f -p 4 \
+            -f \
+            -p \
+            4 \
             Alight.Motion.Custom-unsigned.apk \
             Alight.Motion.Custom-aligned.apk
 
@@ -143,18 +176,44 @@ jobs:
 
           "$BUILD_TOOLS/apksigner" verify \
             --verbose \
+            --print-certs \
             Alight.Motion.Custom.apk
 
       - name: Verify package and effects
+        shell: bash
         run: |
-          java -jar apktool.jar d \
-            -f -s \
-            Alight.Motion.Custom.apk \
-            -o verify
+          set -e
 
-          grep -m1 \
-            'package="com.alightcreative.motion.personal"' \
-            verify/AndroidManifest.xml
+          BUILD_TOOLS="$(
+            find "$ANDROID_HOME/build-tools" \
+              -mindepth 1 \
+              -maxdepth 1 \
+              -type d |
+            sort -V |
+            tail -1
+          )"
+
+          echo
+          echo "=== PACKAGE INFO ==="
+
+          "$BUILD_TOOLS/aapt2" dump badging \
+            Alight.Motion.Custom.apk |
+            head -20
+
+          PACKAGE="$(
+            "$BUILD_TOOLS/aapt2" dump badging \
+              Alight.Motion.Custom.apk |
+            sed -n "s/^package: name='\([^']*\)'.*/\1/p" |
+            head -1
+          )"
+
+          echo
+          echo "Detected package: $PACKAGE"
+
+          test "$PACKAGE" = "com.alightcreative.motion.personal"
+
+          echo
+          echo "=== CUSTOM EFFECTS ==="
 
           unzip -l Alight.Motion.Custom.apk |
             grep 'assets/effects/invert-flash.xml'
@@ -165,9 +224,36 @@ jobs:
           unzip -l Alight.Motion.Custom.apk |
             grep 'assets/effects/tv-simulator.xml'
 
+          echo
+          echo "=== EFFECT NAMES ==="
+
+          unzip -p \
+            Alight.Motion.Custom.apk \
+            assets/effects/invert-flash.xml |
+            grep -F "Invert Flash"
+
+          unzip -p \
+            Alight.Motion.Custom.apk \
+            assets/effects/gradient-map.xml |
+            grep -F "Gradient Map"
+
+          unzip -p \
+            Alight.Motion.Custom.apk \
+            assets/effects/tv-simulator.xml |
+            grep -F "TV Simulator"
+
+          echo
+          echo "=== APK ZIP TEST ==="
+
           unzip -tq Alight.Motion.Custom.apk
 
+          echo
+          echo "=== SHA256 ==="
+
+          sha256sum Alight.Motion.Custom.apk
+
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: alight-motion-custom-side-by-side
