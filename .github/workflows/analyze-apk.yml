@@ -32,6 +32,7 @@ jobs:
         shell: bash
         run: |
           set -u
+          set +o pipefail
           mkdir -p report
           {
             echo '=== APK INFO ==='
