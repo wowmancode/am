@@ -784,7 +784,7 @@ jobs:
             grep \
               'assets/effects/tv-simulator.xml'
 
-    - name: Create split bundle
+      - name: Create split bundle
         run: |
           set -e
 
