@@ -96,32 +96,43 @@ jobs:
 
           "$BUILD_TOOLS/aapt2" version
 
-          BADGING="$("$BUILD_TOOLS/aapt2" dump badging base.apk | head -1)"
+          BADGING="$("$BUILD_TOOLS/aapt2" dump badging base.apk)"
 
           BASE_VERSION_CODE="$(
             printf '%s\n' "$BADGING" |
-            sed -n "s/.*versionCode='\([^']*\)'.*/\1/p"
+            sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p" |
+            head -1
           )"
 
           BASE_VERSION_NAME="$(
             printf '%s\n' "$BADGING" |
-            sed -n "s/.*versionName='\([^']*\)'.*/\1/p"
+            sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p" |
+            head -1
           )"
 
           BASE_MIN_SDK="$(
-            "$BUILD_TOOLS/aapt2" dump badging base.apk |
+            printf '%s\n' "$BADGING" |
             sed -n "s/^sdkVersion:'\([^']*\)'.*/\1/p" |
             head -1
           )"
 
           BASE_TARGET_SDK="$(
-            "$BUILD_TOOLS/aapt2" dump badging base.apk |
+            printf '%s\n' "$BADGING" |
             sed -n "s/^targetSdkVersion:'\([^']*\)'.*/\1/p" |
             head -1
           )"
 
+          # Android treats an omitted targetSdkVersion as minSdkVersion.
+          if [ -z "$BASE_TARGET_SDK" ]; then
+            BASE_TARGET_SDK="$BASE_MIN_SDK"
+          fi
+
+          echo "Base versionCode: ${BASE_VERSION_CODE:-<missing>}"
+          echo "Base versionName: ${BASE_VERSION_NAME:-<not set>}"
+          echo "Base minSdkVersion: ${BASE_MIN_SDK:-<missing>}"
+          echo "Base targetSdkVersion: ${BASE_TARGET_SDK:-<missing>}"
+
           if [ -z "$BASE_VERSION_CODE" ] || \
-             [ -z "$BASE_VERSION_NAME" ] || \
              [ -z "$BASE_MIN_SDK" ] || \
              [ -z "$BASE_TARGET_SDK" ]; then
             echo "ERROR: failed to read package metadata from base.apk" >&2
@@ -132,11 +143,6 @@ jobs:
           echo "BASE_VERSION_NAME=$BASE_VERSION_NAME" >> "$GITHUB_ENV"
           echo "BASE_MIN_SDK=$BASE_MIN_SDK" >> "$GITHUB_ENV"
           echo "BASE_TARGET_SDK=$BASE_TARGET_SDK" >> "$GITHUB_ENV"
-
-          echo "Base versionCode: $BASE_VERSION_CODE"
-          echo "Base versionName: $BASE_VERSION_NAME"
-          echo "Base minSdkVersion: $BASE_MIN_SDK"
-          echo "Base targetSdkVersion: $BASE_TARGET_SDK"
 
       - name: Decode base APK
         run: |
@@ -522,14 +528,23 @@ jobs:
             rm -f "$TEMP_APK"
             rm -f "$OUTPUT_MANIFEST"
 
+            VERSION_ARGS=(
+              --version-code "$BASE_VERSION_CODE"
+            )
+
+            if [ -n "$BASE_VERSION_NAME" ]; then
+              VERSION_ARGS+=(
+                --version-name "$BASE_VERSION_NAME"
+              )
+            fi
+
             "$BUILD_TOOLS/aapt2" link \
               -o "$TEMP_APK" \
               -I "$ANDROID_PLATFORM/android.jar" \
               --manifest "$SOURCE" \
               --min-sdk-version "$BASE_MIN_SDK" \
               --target-sdk-version "$BASE_TARGET_SDK" \
-              --version-code "$BASE_VERSION_CODE" \
-              --version-name "$BASE_VERSION_NAME"
+              "${VERSION_ARGS[@]}"
 
             unzip -p \
               "$TEMP_APK" \
