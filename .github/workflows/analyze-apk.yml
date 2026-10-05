@@ -1,8 +1,6 @@
 name: Analyze Alight Motion APK
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
