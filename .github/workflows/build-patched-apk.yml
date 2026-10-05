@@ -122,6 +122,30 @@ jobs:
             head -1
           )"
 
+          APK_ANALYZER="$(
+            find "$ANDROID_HOME/cmdline-tools" \
+              -type f \
+              -name apkanalyzer 2>/dev/null |
+            sort -V |
+            tail -1
+          )"
+
+          if [ -z "$BASE_MIN_SDK" ] && [ -n "$APK_ANALYZER" ]; then
+            BASE_MIN_SDK="$(
+              "$APK_ANALYZER" manifest min-sdk base.apk |
+              tr -d '\r' |
+              head -1
+            )"
+          fi
+
+          if [ -z "$BASE_TARGET_SDK" ] && [ -n "$APK_ANALYZER" ]; then
+            BASE_TARGET_SDK="$(
+              "$APK_ANALYZER" manifest target-sdk base.apk |
+              tr -d '\r' |
+              head -1
+            )"
+          fi
+
           # Android treats an omitted targetSdkVersion as minSdkVersion.
           if [ -z "$BASE_TARGET_SDK" ]; then
             BASE_TARGET_SDK="$BASE_MIN_SDK"
