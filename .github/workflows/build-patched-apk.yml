@@ -1,7 +1,19 @@
-name: Build Side-by-Side Alight Motion Split Set
+name: Build Custom Alight Motion APK
+
+# Takes the Morphe-patched Alight Motion APK from a private release (am-2 by
+# default), adds the custom effects from patch/effects/, then aligns and signs
+# it with the persistent clone key.
+#
+# The Morphe-patched APK is already a side-by-side clone (its package is
+# com.alightcreative.motion.morphe), so nothing is renamed here.
 
 on:
   workflow_dispatch:
+    inputs:
+      source_release:
+        description: "Release tag that holds the Morphe-patched Alight_Motion-*.apk"
+        required: false
+        default: "am-2"
   push:
     branches:
       - main
@@ -12,6 +24,10 @@ on:
 permissions:
   contents: read
 
+env:
+  SOURCE_RELEASE: ${{ inputs.source_release || 'am-2' }}
+  ORIGINAL_PACKAGE: com.alightcreative.motion
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -20,52 +36,34 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Download original APK split set
+      - name: Download Morphe-patched APK
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -e
 
-          gh release download am \
+          mkdir -p source
+
+          gh release download "$SOURCE_RELEASE" \
             --repo "$GITHUB_REPOSITORY" \
-            --pattern "base.apk" \
+            --pattern "Alight_Motion-*.apk" \
+            --dir source \
             --clobber
 
-          gh release download am \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "split_config.arm64_v8a.apk" \
-            --clobber
+          COUNT="$(find source -maxdepth 1 -type f -name '*.apk' | wc -l)"
 
-          gh release download am \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "split_config.en.apk" \
-            --clobber
+          if [ "$COUNT" -ne 1 ]; then
+            echo "ERROR: expected exactly one Alight_Motion-*.apk in release $SOURCE_RELEASE, found $COUNT" >&2
+            ls -l source >&2
+            exit 1
+          fi
 
-          gh release download am \
-            --repo "$GITHUB_REPOSITORY" \
-            --pattern "split_config.xxhdpi.apk" \
-            --clobber
+          mv source/*.apk source.apk
+          rmdir source
 
-          ls -lh *.apk
+          ls -lh source.apk
 
-      - name: Install tools
-        run: |
-          set -e
-
-          sudo apt-get update
-          sudo apt-get install -y \
-            unzip \
-            zip \
-            curl \
-            openjdk-17-jdk
-
-          curl -L --fail \
-            -o apktool.jar \
-            https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
-
-          java -jar apktool.jar --version
-
-      - name: Locate Android build tools
+      - name: Locate Android build tools and read source metadata
         shell: bash
         run: |
           set -e
@@ -79,770 +77,154 @@ jobs:
             tail -1
           )"
 
-          PLATFORM="$(
-            find "$ANDROID_HOME/platforms" \
-              -mindepth 1 \
-              -maxdepth 1 \
-              -type d |
-            sort -V |
-            tail -1
-          )"
-
           echo "BUILD_TOOLS=$BUILD_TOOLS" >> "$GITHUB_ENV"
-          echo "ANDROID_PLATFORM=$PLATFORM" >> "$GITHUB_ENV"
 
           echo "Build tools: $BUILD_TOOLS"
-          echo "Platform: $PLATFORM"
-
           "$BUILD_TOOLS/aapt2" version
 
-          BADGING="$("$BUILD_TOOLS/aapt2" dump badging base.apk)"
+          BADGING="$("$BUILD_TOOLS/aapt2" dump badging source.apk)"
 
-          BASE_VERSION_CODE="$(
+          SOURCE_PACKAGE="$(
+            printf '%s\n' "$BADGING" |
+            sed -n "s/^package: name='\([^']*\)'.*/\1/p" |
+            head -1
+          )"
+
+          SOURCE_VERSION_CODE="$(
             printf '%s\n' "$BADGING" |
             sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p" |
             head -1
           )"
 
-          BASE_VERSION_NAME="$(
+          SOURCE_VERSION_NAME="$(
             printf '%s\n' "$BADGING" |
             sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p" |
             head -1
           )"
 
-          BASE_MIN_SDK="$(
+          SOURCE_MIN_SDK="$(
             printf '%s\n' "$BADGING" |
             sed -n "s/^sdkVersion:'\([^']*\)'.*/\1/p" |
             head -1
           )"
 
-          BASE_TARGET_SDK="$(
-            printf '%s\n' "$BADGING" |
-            sed -n "s/^targetSdkVersion:'\([^']*\)'.*/\1/p" |
-            head -1
-          )"
+          echo "Source package: ${SOURCE_PACKAGE:-<missing>}"
+          echo "Source versionCode: ${SOURCE_VERSION_CODE:-<missing>}"
+          echo "Source versionName: ${SOURCE_VERSION_NAME:-<not set>}"
+          echo "Source minSdkVersion: ${SOURCE_MIN_SDK:-<missing>}"
 
-          APK_ANALYZER="$(
-            find "$ANDROID_HOME/cmdline-tools" \
-              -type f \
-              -name apkanalyzer 2>/dev/null |
-            sort -V |
-            tail -1
-          )"
-
-          if [ -z "$BASE_MIN_SDK" ] && [ -n "$APK_ANALYZER" ]; then
-            BASE_MIN_SDK="$(
-              "$APK_ANALYZER" manifest min-sdk base.apk |
-              tr -d '\r' |
-              head -1
-            )"
-          fi
-
-          if [ -z "$BASE_TARGET_SDK" ] && [ -n "$APK_ANALYZER" ]; then
-            BASE_TARGET_SDK="$(
-              "$APK_ANALYZER" manifest target-sdk base.apk |
-              tr -d '\r' |
-              head -1
-            )"
-          fi
-
-          # Android treats an omitted targetSdkVersion as minSdkVersion.
-          if [ -z "$BASE_TARGET_SDK" ]; then
-            BASE_TARGET_SDK="$BASE_MIN_SDK"
-          fi
-
-          echo "Base versionCode: ${BASE_VERSION_CODE:-<missing>}"
-          echo "Base versionName: ${BASE_VERSION_NAME:-<not set>}"
-          echo "Base minSdkVersion: ${BASE_MIN_SDK:-<missing>}"
-          echo "Base targetSdkVersion: ${BASE_TARGET_SDK:-<missing>}"
-
-          if [ -z "$BASE_VERSION_CODE" ] || \
-             [ -z "$BASE_MIN_SDK" ] || \
-             [ -z "$BASE_TARGET_SDK" ]; then
-            echo "ERROR: failed to read package metadata from base.apk" >&2
+          if [ -z "$SOURCE_PACKAGE" ] || \
+             [ -z "$SOURCE_VERSION_CODE" ] || \
+             [ -z "$SOURCE_MIN_SDK" ]; then
+            echo "ERROR: failed to read package metadata from source.apk" >&2
             exit 1
           fi
 
-          echo "BASE_VERSION_CODE=$BASE_VERSION_CODE" >> "$GITHUB_ENV"
-          echo "BASE_VERSION_NAME=$BASE_VERSION_NAME" >> "$GITHUB_ENV"
-          echo "BASE_MIN_SDK=$BASE_MIN_SDK" >> "$GITHUB_ENV"
-          echo "BASE_TARGET_SDK=$BASE_TARGET_SDK" >> "$GITHUB_ENV"
-
-      - name: Decode base APK
-        run: |
-          set -e
-
-          java -jar apktool.jar d \
-            -f \
-            base.apk \
-            -o decoded-base
-
-      - name: Decode split manifests
-        run: |
-          set -e
-
-          java -jar apktool.jar d \
-            -f \
-            --only-manifest \
-            split_config.arm64_v8a.apk \
-            -o decoded-arm64
-
-          java -jar apktool.jar d \
-            -f \
-            --only-manifest \
-            split_config.en.apk \
-            -o decoded-en
-
-          java -jar apktool.jar d \
-            -f \
-            --only-manifest \
-            split_config.xxhdpi.apk \
-            -o decoded-xxhdpi
-
-          echo
-          echo "=== DECODED SPLIT MANIFESTS ==="
-
-          head -3 decoded-arm64/AndroidManifest.xml
-          head -3 decoded-en/AndroidManifest.xml
-          head -3 decoded-xxhdpi/AndroidManifest.xml
-
-      - name: Rename base application package
-        shell: bash
-        run: |
-          set -e
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-          import xml.etree.ElementTree as ET
-
-          OLD = "com.alightcreative.motion"
-          NEW = "com.alightcreative.motion.personal"
-
-          manifest_path = Path("decoded-base/AndroidManifest.xml")
-
-          android_ns = "http://schemas.android.com/apk/res/android"
-
-          tree = ET.parse(manifest_path)
-          root = tree.getroot()
-
-          name_attr = f"{{{android_ns}}}name"
-          target_attr = f"{{{android_ns}}}targetActivity"
-          authorities_attr = f"{{{android_ns}}}authorities"
-
-          component_tags = {
-              "activity",
-              "activity-alias",
-              "service",
-              "receiver",
-              "provider",
-              "application",
-              "instrumentation",
-          }
-
-          changed_names = 0
-          authority_replacements = {}
-          permission_replacements = {}
-
-          # App-defined permissions must be unique too. If the clone keeps
-          # the original permission names, Android can treat them as owned by
-          # the official app's different signing certificate.
-          for elem in root.iter():
-              tag = elem.tag.split("}")[-1]
-              if tag not in {"permission", "permission-tree", "permission-group"}:
-                  continue
-              value = elem.attrib.get(name_attr)
-              if value == OLD or (value and value.startswith(OLD + ".")):
-                  new_value = NEW + value[len(OLD):]
-                  permission_replacements[value] = new_value
-                  elem.attrib[name_attr] = new_value
-
-          # Update every manifest reference to an app-defined permission.
-          permission_attrs = [
-              name_attr,
-              f"{{{android_ns}}}permission",
-              f"{{{android_ns}}}readPermission",
-              f"{{{android_ns}}}writePermission",
-          ]
-          for elem in root.iter():
-              for attr in permission_attrs:
-                  value = elem.attrib.get(attr)
-                  if value in permission_replacements:
-                      elem.attrib[attr] = permission_replacements[value]
-
-          def rename_authority(authority):
-              if authority == NEW or authority.startswith(NEW + "."):
-                  return authority
-              if authority == OLD or authority.startswith(OLD + "."):
-                  return NEW + authority[len(OLD):]
-              if authority == "com.alightcreative.app.motion.fileprovider":
-                  return "com.alightcreative.app.motion.personal.fileprovider"
-              return authority
-
-          for elem in root.iter():
-
-              tag = elem.tag.split("}")[-1]
-
-              if tag not in component_tags:
-                  continue
-
-              if name_attr in elem.attrib:
-
-                  value = elem.attrib[name_attr]
-
-                  if value.startswith("."):
-                      elem.attrib[name_attr] = OLD + value
-                      changed_names += 1
-
-              if target_attr in elem.attrib:
-
-                  value = elem.attrib[target_attr]
-
-                  if value.startswith("."):
-                      elem.attrib[target_attr] = OLD + value
-                      changed_names += 1
-
-              if tag == "provider" and authorities_attr in elem.attrib:
-                  old_authorities = elem.attrib[authorities_attr]
-                  new_authorities = ";".join(
-                      rename_authority(authority)
-                      for authority in old_authorities.split(";")
-                  )
-
-                  if new_authorities != old_authorities:
-                      for old_authority, new_authority in zip(
-                          old_authorities.split(";"),
-                          new_authorities.split(";"),
-                      ):
-                          if old_authority != new_authority:
-                              authority_replacements[old_authority] = new_authority
-
-                      elem.attrib[authorities_attr] = new_authorities
-
-          ET.register_namespace(
-              "android",
-              android_ns
-          )
-
-          tree.write(
-              manifest_path,
-              encoding="utf-8",
-              xml_declaration=True
-          )
-
-          text = manifest_path.read_text(
-              encoding="utf-8"
-          )
-
-          text, count = re.subn(
-              r'\bpackage="' + re.escape(OLD) + r'"',
-              f'package="{NEW}"',
-              text,
-              count=1
-          )
-
-          if count != 1:
-              raise SystemExit(
-                  "ERROR: failed to rename base package"
-              )
-
-          text = re.sub(
-              r'(<application\b[^>]*?\bandroid:label=)"[^"]*"',
-              r'\1"Alight Motion Custom"',
-              text,
-              count=1
-          )
-
-          text = text.replace(
-              "com.alightcreative.motion.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION",
-              "com.alightcreative.motion.personal.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
-          )
-
-          text = text.replace(
-              "com.alightcreative.app.motion.fileprovider",
-              "com.alightcreative.app.motion.personal.fileprovider"
-          )
-
-          manifest_path.write_text(
-              text,
-              encoding="utf-8"
-          )
-
-          replacements = {
-              '"com.alightcreative.motion"':
-                  '"com.alightcreative.motion.personal"',
-
-              '"com.alightcreative.app.motion.fileprovider"':
-                  '"com.alightcreative.app.motion.personal.fileprovider"',
-
-              '"com.alightcreative.motion.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"':
-                  '"com.alightcreative.motion.personal.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"',
-          }
-
-          replacements.update({
-              f'"{old_authority}"': f'"{new_authority}"'
-              for old_authority, new_authority in authority_replacements.items()
-          })
-
-          replacements.update({
-              f'"{old_permission}"': f'"{new_permission}"'
-              for old_permission, new_permission in permission_replacements.items()
-          })
-
-          changed_smali = 0
-
-          for root_dir in Path("decoded-base").glob("smali*"):
-
-              if not root_dir.is_dir():
-                  continue
-
-              for path in root_dir.rglob("*.smali"):
-
-                  try:
-                      old_text = path.read_text(
-                          encoding="utf-8"
-                      )
-                  except UnicodeDecodeError:
-                      continue
-
-                  new_text = old_text
-
-                  for old, new in replacements.items():
-                      new_text = new_text.replace(
-                          old,
-                          new
-                      )
-
-                  if new_text != old_text:
-
-                      path.write_text(
-                          new_text,
-                          encoding="utf-8"
-                      )
-
-                      changed_smali += 1
-
-          print(
-              "Relative manifest classes converted:",
-              changed_names
-          )
-
-          print(
-              "Smali literal files changed:",
-              changed_smali
-          )
-
-          print(
-              "Provider authorities renamed:",
-              len(authority_replacements)
-          )
-
-          print(
-              "App-defined permissions renamed:",
-              len(permission_replacements)
-          )
-
-          for old_permission, new_permission in sorted(permission_replacements.items()):
-              print(
-                  "Permission:",
-                  old_permission,
-                  "->",
-                  new_permission
-              )
-
-          for old_authority, new_authority in sorted(authority_replacements.items()):
-              print(
-                  "Provider authority:",
-                  old_authority,
-                  "->",
-                  new_authority
-              )
-
-          tree = ET.parse(manifest_path)
-          root = tree.getroot()
-
-          conflicting_authorities = []
-
-          for elem in root.iter():
-              if elem.tag.split("}")[-1] != "provider":
-                  continue
-
-              for authority in elem.attrib.get(authorities_attr, "").split(";"):
-                  in_old_namespace = (
-                      authority == OLD
-                      or authority.startswith(OLD + ".")
-                  ) and not (
-                      authority == NEW
-                      or authority.startswith(NEW + ".")
-                  )
-
-                  if in_old_namespace or authority == "com.alightcreative.app.motion.fileprovider":
-                      conflicting_authorities.append(authority)
-
-          if conflicting_authorities:
-              raise SystemExit(
-                  "ERROR: conflicting provider authorities remain: "
-                  + ", ".join(sorted(set(conflicting_authorities)))
-              )
-
-          m = re.search(
-              r'\bpackage="([^"]+)"',
-              manifest_path.read_text(
-                  encoding="utf-8"
-              )
-          )
-
-          print(
-              "Base package:",
-              m.group(1) if m else "NOT FOUND"
-          )
-
-          if not m or m.group(1) != NEW:
-              raise SystemExit(
-                  "ERROR: incorrect base package"
-              )
-
-          PY
-
-      - name: Rename split packages
-        shell: bash
-        run: |
-          set -e
-
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          OLD = "com.alightcreative.motion"
-          NEW = "com.alightcreative.motion.personal"
-
-          manifests = [
-              Path(
-                  "decoded-arm64/AndroidManifest.xml"
-              ),
-              Path(
-                  "decoded-en/AndroidManifest.xml"
-              ),
-              Path(
-                  "decoded-xxhdpi/AndroidManifest.xml"
-              ),
-          ]
-
-          for manifest in manifests:
-
-              text = manifest.read_text(
-                  encoding="utf-8"
-              )
-
-              old_package = re.search(
-                  r'\bpackage="([^"]+)"',
-                  text
-              )
-
-              split = re.search(
-                  r'\bsplit="([^"]+)"',
-                  text
-              )
-
-              print()
-              print(
-                  "Manifest:",
-                  manifest
-              )
-
-              print(
-                  "Old package:",
-                  old_package.group(1)
-                  if old_package
-                  else "NOT FOUND"
-              )
-
-              print(
-                  "Split:",
-                  split.group(1)
-                  if split
-                  else "NOT FOUND"
-              )
-
-              if not split:
-                  raise SystemExit(
-                      f"ERROR: split attribute missing in {manifest}"
-                  )
-
-              original_split = split.group(1)
-
-              text, count = re.subn(
-                  r'\bpackage="' +
-                  re.escape(OLD) +
-                  r'"',
-                  f'package="{NEW}"',
-                  text,
-                  count=1
-              )
-
-              if count != 1:
-                  raise SystemExit(
-                      f"ERROR: couldn't rename {manifest}"
-                  )
-
-              manifest.write_text(
-                  text,
-                  encoding="utf-8"
-              )
-
-              result = manifest.read_text(
-                  encoding="utf-8"
-              )
-
-              pkg = re.search(
-                  r'\bpackage="([^"]+)"',
-                  result
-              )
-
-              split_after = re.search(
-                  r'\bsplit="([^"]+)"',
-                  result
-              )
-
-              if not pkg or pkg.group(1) != NEW:
-                  raise SystemExit(
-                      f"ERROR: wrong package in {manifest}"
-                  )
-
-              if (
-                  not split_after
-                  or split_after.group(1)
-                  != original_split
-              ):
-                  raise SystemExit(
-                      f"ERROR: split identity changed in {manifest}"
-                  )
-
-              print(
-                  "New package:",
-                  pkg.group(1)
-              )
-
-              print(
-                  "Preserved split:",
-                  split_after.group(1)
-              )
-
-          PY
+          # The whole point of the clone is to install next to the official
+          # app. If the release holds an unpatched APK, stop here instead of
+          # shipping something that would replace or conflict with it.
+          if [ "$SOURCE_PACKAGE" = "$ORIGINAL_PACKAGE" ]; then
+            echo "ERROR: source.apk still uses the original package $ORIGINAL_PACKAGE; expected a Morphe-patched clone" >&2
+            exit 1
+          fi
+
+          echo "SOURCE_PACKAGE=$SOURCE_PACKAGE" >> "$GITHUB_ENV"
+          echo "SOURCE_VERSION_CODE=$SOURCE_VERSION_CODE" >> "$GITHUB_ENV"
+          echo "SOURCE_VERSION_NAME=$SOURCE_VERSION_NAME" >> "$GITHUB_ENV"
+          echo "SOURCE_MIN_SDK=$SOURCE_MIN_SDK" >> "$GITHUB_ENV"
 
       - name: Add custom effects
-        run: |
-          set -e
-
-          cp \
-            patch/effects/invert-flash.xml \
-            decoded-base/assets/effects/invert-flash.xml
-
-          cp \
-            patch/effects/gradient-map.xml \
-            decoded-base/assets/effects/gradient-map.xml
-
-          cp \
-            patch/effects/tv-simulator.xml \
-            decoded-base/assets/effects/tv-simulator.xml
-
-      - name: Build cloned base APK
-        run: |
-          set -e
-
-          java -jar apktool.jar b \
-            decoded-base \
-            -o base-custom-unsigned.apk
-
-      - name: Compile split manifests to binary XML
         shell: bash
         run: |
           set -e
-
-          mkdir -p compiled-manifests
-
-          compile_manifest () {
-
-            SOURCE="$1"
-            TEMP_APK="$2"
-            OUTPUT_MANIFEST="$3"
-
-            rm -f "$TEMP_APK"
-            rm -f "$OUTPUT_MANIFEST"
-
-            VERSION_ARGS=(
-              --version-code "$BASE_VERSION_CODE"
-            )
-
-            if [ -n "$BASE_VERSION_NAME" ]; then
-              VERSION_ARGS+=(
-                --version-name "$BASE_VERSION_NAME"
-              )
-            fi
-
-            "$BUILD_TOOLS/aapt2" link \
-              -o "$TEMP_APK" \
-              -I "$ANDROID_PLATFORM/android.jar" \
-              --manifest "$SOURCE" \
-              --min-sdk-version "$BASE_MIN_SDK" \
-              --target-sdk-version "$BASE_TARGET_SDK" \
-              "${VERSION_ARGS[@]}"
-
-            unzip -p \
-              "$TEMP_APK" \
-              AndroidManifest.xml \
-              > "$OUTPUT_MANIFEST"
-
-            test -s "$OUTPUT_MANIFEST"
-
-            echo
-            echo "Compiled manifest:"
-            file "$OUTPUT_MANIFEST"
-          }
-
-          compile_manifest \
-            decoded-arm64/AndroidManifest.xml \
-            compiled-manifests/arm64-temp.apk \
-            compiled-manifests/arm64-manifest.bin
-
-          compile_manifest \
-            decoded-en/AndroidManifest.xml \
-            compiled-manifests/en-temp.apk \
-            compiled-manifests/en-manifest.bin
-
-          compile_manifest \
-            decoded-xxhdpi/AndroidManifest.xml \
-            compiled-manifests/xxhdpi-temp.apk \
-            compiled-manifests/xxhdpi-manifest.bin
-
-      - name: Repack original splits with compiled manifests
-        shell: bash
-        run: |
-          set -e
-
-          mkdir -p unsigned-splits
-
-          repack_split () {
-
-            ORIGINAL="$1"
-            MANIFEST="$2"
-            OUTPUT="$3"
-
-            WORK="$(mktemp -d "$RUNNER_TEMP/split.XXXXXX")"
-            OUTPUT_ABS="$GITHUB_WORKSPACE/$OUTPUT"
-
-            # Keep the original archive intact so stored native libraries stay
-            # stored. Rebuilding with `zip -r` deflates lib/**/*.so and Android
-            # rejects the split when extractNativeLibs is false.
-            cp "$ORIGINAL" "$OUTPUT_ABS"
-
-            cp \
-              "$MANIFEST" \
-              "$WORK/AndroidManifest.xml"
-
-            if zipinfo -1 "$OUTPUT_ABS" | grep -q '^META-INF/'; then
-              zip -q -d "$OUTPUT_ABS" 'META-INF/*'
-            fi
-            zip -q -d "$OUTPUT_ABS" AndroidManifest.xml
-
-            (
-              cd "$WORK"
-              zip -q -0 "$OUTPUT_ABS" AndroidManifest.xml
-            )
-
-            rm -rf "$WORK"
-          }
-
-          repack_split \
-            split_config.arm64_v8a.apk \
-            compiled-manifests/arm64-manifest.bin \
-            unsigned-splits/split_config.arm64_v8a.apk
-
-          repack_split \
-            split_config.en.apk \
-            compiled-manifests/en-manifest.bin \
-            unsigned-splits/split_config.en.apk
-
-          repack_split \
-            split_config.xxhdpi.apk \
-            compiled-manifests/xxhdpi-manifest.bin \
-            unsigned-splits/split_config.xxhdpi.apk
 
           python3 - <<'PY'
           from pathlib import Path
-          from zipfile import ZIP_STORED, ZipFile
+          from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
+          import re
 
-          pairs = [
-              (Path("split_config.arm64_v8a.apk"), Path("unsigned-splits/split_config.arm64_v8a.apk")),
-              (Path("split_config.en.apk"), Path("unsigned-splits/split_config.en.apk")),
-              (Path("split_config.xxhdpi.apk"), Path("unsigned-splits/split_config.xxhdpi.apk")),
-          ]
+          SOURCE = Path("source.apk")
+          OUTPUT = Path("custom-unsigned.apk")
+          EFFECTS_DIR = Path("patch/effects")
+          TARGET_DIR = "assets/effects/"
 
-          for original_path, rebuilt_path in pairs:
-              with ZipFile(original_path) as original, ZipFile(rebuilt_path) as rebuilt:
-                  original_entries = {entry.filename: entry for entry in original.infolist()}
-                  rebuilt_entries = {entry.filename: entry for entry in rebuilt.infolist()}
+          effects = sorted(EFFECTS_DIR.glob("*.xml"))
+          if not effects:
+              raise SystemExit(f"ERROR: no effect files found in {EFFECTS_DIR}")
 
-                  for name, before in original_entries.items():
-                      if name == "AndroidManifest.xml" or name.startswith("META-INF/"):
-                          continue
-                      after = rebuilt_entries.get(name)
-                      if after is None:
-                          raise SystemExit(f"ERROR: {rebuilt_path} lost {name}")
-                      if (after.CRC, after.file_size, after.compress_size, after.compress_type) != (
-                          before.CRC,
-                          before.file_size,
-                          before.compress_size,
-                          before.compress_type,
-                      ):
-                          raise SystemExit(f"ERROR: {rebuilt_path} changed {name}")
+          new_names = {TARGET_DIR + path.name for path in effects}
 
-                  native_libraries = [
-                      entry for entry in rebuilt_entries.values()
-                      if entry.filename.startswith("lib/") and entry.filename.endswith(".so")
-                  ]
-                  compressed = [entry.filename for entry in native_libraries if entry.compress_type != ZIP_STORED]
-                  if compressed:
-                      raise SystemExit(
-                          f"ERROR: compressed native libraries in {rebuilt_path}: " + ", ".join(compressed)
-                      )
+          # Only the old signature is dropped. Other META-INF entries (service
+          # files, version markers) are part of the app and stay.
+          signature = re.compile(
+              r"^META-INF/(MANIFEST\.MF|[^/]+\.(SF|RSA|DSA|EC))$"
+          )
 
-                  print(f"Verified preserved ZIP entries: {rebuilt_path}")
-                  print(f"Verified stored native libraries: {len(native_libraries)}")
+          kept = 0
+          replaced = 0
+          dropped_signature = 0
+
+          with ZipFile(SOURCE) as src, ZipFile(OUTPUT, "w") as dst:
+              for info in src.infolist():
+                  if signature.match(info.filename):
+                      dropped_signature += 1
+                      continue
+
+                  if info.filename in new_names:
+                      replaced += 1
+                      continue
+
+                  # Copy each entry with its original compression method so
+                  # resources.arsc and the native libraries stay stored.
+                  copy = ZipInfo(info.filename, date_time=info.date_time)
+                  copy.compress_type = info.compress_type
+                  copy.external_attr = info.external_attr
+                  copy.create_system = info.create_system
+                  dst.writestr(copy, src.read(info.filename))
+                  kept += 1
+
+              for path in effects:
+                  entry = ZipInfo(TARGET_DIR + path.name, date_time=(1981, 1, 1, 1, 1, 1))
+                  entry.compress_type = ZIP_DEFLATED
+                  entry.external_attr = 0o644 << 16
+                  dst.writestr(entry, path.read_bytes())
+                  print("Added:", entry.filename)
+
+          print("Entries copied unchanged:", kept)
+          print("Existing effect entries replaced:", replaced)
+          print("Old signature entries dropped:", dropped_signature)
+
+          # Prove nothing else changed.
+          with ZipFile(SOURCE) as before, ZipFile(OUTPUT) as after:
+              after_entries = {entry.filename: entry for entry in after.infolist()}
+
+              for entry in before.infolist():
+                  name = entry.filename
+                  if signature.match(name) or name in new_names:
+                      continue
+
+                  rebuilt = after_entries.get(name)
+                  if rebuilt is None:
+                      raise SystemExit(f"ERROR: lost {name}")
+
+                  if (rebuilt.CRC, rebuilt.file_size, rebuilt.compress_type) != (
+                      entry.CRC,
+                      entry.file_size,
+                      entry.compress_type,
+                  ):
+                      raise SystemExit(f"ERROR: changed {name}")
+
+              for path in effects:
+                  rebuilt = after_entries.get(TARGET_DIR + path.name)
+                  if rebuilt is None or after.read(rebuilt) != path.read_bytes():
+                      raise SystemExit(f"ERROR: {path.name} was not added correctly")
+
+              resources = after_entries.get("resources.arsc")
+              if resources is None or resources.compress_type != ZIP_STORED:
+                  raise SystemExit("ERROR: resources.arsc must stay stored")
+
+          print("Verified every original entry is unchanged.")
           PY
-
-      - name: Verify unsigned split manifests are binary
-        run: |
-          set -e
-
-          mkdir -p manifest-check
-
-          for APK in \
-            unsigned-splits/split_config.arm64_v8a.apk \
-            unsigned-splits/split_config.en.apk \
-            unsigned-splits/split_config.xxhdpi.apk
-          do
-
-            NAME="$(basename "$APK")"
-
-            unzip -p \
-              "$APK" \
-              AndroidManifest.xml \
-              > "manifest-check/$NAME.xml"
-
-            echo
-            echo "===== $APK ====="
-
-            file \
-              "manifest-check/$NAME.xml"
-
-            "$BUILD_TOOLS/aapt2" \
-              dump xmltree \
-              "$APK" \
-              AndroidManifest.xml |
-              head -30
-
-          done
 
       - name: Prepare clone signing key
         env:
@@ -892,305 +274,165 @@ jobs:
             -storepass "$PATCH_KEYSTORE_PASSWORD" \
             -alias "$PATCH_KEY_ALIAS"
 
-      - name: Align and sign all APKs
+      - name: Align and sign
         shell: bash
         run: |
           set -e
 
           mkdir -p output
-          mkdir -p aligned
 
-          align_sign () {
+          # Signature schemes v2/v3 need Android 7.0 (API 24). Only add the
+          # older JAR signature when the app still supports earlier releases.
+          if [ "$SOURCE_MIN_SDK" -lt 24 ]; then
+            V1_SIGNING=true
+          else
+            V1_SIGNING=false
+          fi
 
-            INPUT="$1"
-            ALIGNED="$2"
-            OUTPUT="$3"
+          echo "minSdkVersion: $SOURCE_MIN_SDK (v1 signing: $V1_SIGNING)"
 
-            echo
-            echo "=== ALIGNING $INPUT ==="
+          echo
+          echo "=== ALIGNING ==="
 
-            "$BUILD_TOOLS/zipalign" \
-              -f \
-              -P 16 \
-              4 \
-              "$INPUT" \
-              "$ALIGNED"
+          # -P 16 page-aligns stored native libraries, which the app needs
+          # because it ships them uncompressed (extractNativeLibs=false).
+          "$BUILD_TOOLS/zipalign" \
+            -f \
+            -P 16 \
+            4 \
+            custom-unsigned.apk \
+            custom-aligned.apk
 
-            echo
-            echo "=== SIGNING $OUTPUT ==="
+          echo
+          echo "=== SIGNING ==="
 
-            "$BUILD_TOOLS/apksigner" sign \
-              --ks patch.keystore \
-              --ks-key-alias "$PATCH_KEY_ALIAS" \
-              --ks-pass "pass:$PATCH_KEYSTORE_PASSWORD" \
-              --key-pass "pass:$PATCH_KEY_PASSWORD" \
-              --min-sdk-version "$BASE_MIN_SDK" \
-              --v1-signing-enabled false \
-              --v2-signing-enabled true \
-              --v3-signing-enabled true \
-              --out "$OUTPUT" \
-              "$ALIGNED"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks patch.keystore \
+            --ks-key-alias "$PATCH_KEY_ALIAS" \
+            --ks-pass "pass:$PATCH_KEYSTORE_PASSWORD" \
+            --key-pass "pass:$PATCH_KEY_PASSWORD" \
+            --min-sdk-version "$SOURCE_MIN_SDK" \
+            --v1-signing-enabled "$V1_SIGNING" \
+            --v2-signing-enabled true \
+            --v3-signing-enabled true \
+            --out output/Alight.Motion.Custom.apk \
+            custom-aligned.apk
 
-            echo
-            echo "=== VERIFYING SIGNATURE ==="
+          echo
+          echo "=== VERIFYING SIGNATURE ==="
 
-            "$BUILD_TOOLS/apksigner" verify \
-              --min-sdk-version "$BASE_MIN_SDK" \
-              --verbose \
-              --print-certs \
-              "$OUTPUT"
+          "$BUILD_TOOLS/apksigner" verify \
+            --min-sdk-version "$SOURCE_MIN_SDK" \
+            --verbose \
+            --print-certs \
+            output/Alight.Motion.Custom.apk
 
-            echo
-            echo "=== VERIFYING ALIGNMENT ==="
-
-            "$BUILD_TOOLS/zipalign" \
-              -c \
-              -P 16 \
-              -v \
-              4 \
-              "$OUTPUT"
-          }
-
-          align_sign \
-            base-custom-unsigned.apk \
-            aligned/base.apk \
-            output/base.apk
-
-          align_sign \
-            unsigned-splits/split_config.arm64_v8a.apk \
-            aligned/split_config.arm64_v8a.apk \
-            output/split_config.arm64_v8a.apk
-
-          align_sign \
-            unsigned-splits/split_config.en.apk \
-            aligned/split_config.en.apk \
-            output/split_config.en.apk
-
-          align_sign \
-            unsigned-splits/split_config.xxhdpi.apk \
-            aligned/split_config.xxhdpi.apk \
-            output/split_config.xxhdpi.apk
-
-      - name: Verify all package names
-        shell: bash
-        run: |
-          set -e
-
-          EXPECTED="com.alightcreative.motion.personal"
-
-          for APK in \
-            output/base.apk \
-            output/split_config.arm64_v8a.apk \
-            output/split_config.en.apk \
-            output/split_config.xxhdpi.apk
-          do
-
-            echo
-            echo "===================================="
-            echo "$APK"
-            echo "===================================="
-
-            "$BUILD_TOOLS/aapt2" \
-              dump badging \
-              "$APK" |
-              head -25
-
-            PACKAGE="$(
-              "$BUILD_TOOLS/aapt2" \
-                dump badging \
-                "$APK" |
-              sed -n \
-                "s/^package: name='\([^']*\)'.*/\1/p" |
-              head -1
-            )"
-
-            VERSION_CODE="$(
-              "$BUILD_TOOLS/aapt2" \
-                dump badging \
-                "$APK" |
-              sed -n \
-                "s/^package:.*versionCode='\([^']*\)'.*/\1/p" |
-              head -1
-            )"
-
-            echo
-            echo "Detected package: $PACKAGE"
-            echo "Detected versionCode: $VERSION_CODE"
-
-            if [ "$PACKAGE" != "$EXPECTED" ]; then
-
-              echo "ERROR: package mismatch in $APK"
-              exit 1
-
-            fi
-
-            if [ "$VERSION_CODE" != "$BASE_VERSION_CODE" ]; then
-
-              echo "ERROR: versionCode mismatch in $APK"
-              exit 1
-
-            fi
-
-          done
-
-      - name: Verify split identities
-        shell: bash
-        run: |
-          set -e
-
-          for PAIR in \
-            "split_config.arm64_v8a.apk|output/split_config.arm64_v8a.apk" \
-            "split_config.en.apk|output/split_config.en.apk" \
-            "split_config.xxhdpi.apk|output/split_config.xxhdpi.apk"
-          do
-
-            ORIGINAL="${PAIR%%|*}"
-            APK="${PAIR#*|}"
-
-            echo
-            echo "===== $APK ====="
-
-            "$BUILD_TOOLS/aapt2" \
-              dump xmltree \
-              "$APK" \
-              AndroidManifest.xml |
-              grep -E \
-                'package=|split=|configForSplit' \
-                || true
-
-            ORIGINAL_SPLIT="$(
-              "$BUILD_TOOLS/aapt2" dump badging "$ORIGINAL" |
-              sed -n "s/^package:.* split='\([^']*\)'.*/\1/p" |
-              head -1
-            )"
-
-            OUTPUT_SPLIT="$(
-              "$BUILD_TOOLS/aapt2" dump badging "$APK" |
-              sed -n "s/^package:.* split='\([^']*\)'.*/\1/p" |
-              head -1
-            )"
-
-            if [ -z "$ORIGINAL_SPLIT" ] || [ "$OUTPUT_SPLIT" != "$ORIGINAL_SPLIT" ]; then
-              echo "ERROR: split identity mismatch in $APK" >&2
-              echo "Original: $ORIGINAL_SPLIT" >&2
-              echo "Output: $OUTPUT_SPLIT" >&2
-              exit 1
-            fi
-
-          done
-
-      - name: Verify native libraries are installable
-        shell: bash
-        run: |
-          set -e
-
-          python3 - <<'PY'
-          from pathlib import Path
-          from zipfile import ZIP_STORED, ZipFile
-
-          found = 0
-          for apk in sorted(Path("output").glob("*.apk")):
-              with ZipFile(apk) as archive:
-                  libraries = [
-                      entry for entry in archive.infolist()
-                      if entry.filename.startswith("lib/") and entry.filename.endswith(".so")
-                  ]
-                  found += len(libraries)
-                  compressed = [entry.filename for entry in libraries if entry.compress_type != ZIP_STORED]
-                  if compressed:
-                      raise SystemExit(
-                          f"ERROR: {apk} contains compressed native libraries: " + ", ".join(compressed)
-                      )
-                  print(f"{apk}: {len(libraries)} stored native libraries")
-
-          if found == 0:
-              raise SystemExit("ERROR: no native libraries found in the split set")
-          PY
+          echo
+          echo "=== VERIFYING ALIGNMENT ==="
 
           "$BUILD_TOOLS/zipalign" \
             -c \
             -P 16 \
             -v \
             4 \
-            output/split_config.arm64_v8a.apk
+            output/Alight.Motion.Custom.apk |
+            tail -5
 
-      - name: Verify custom effects
+      - name: Verify output
+        shell: bash
         run: |
           set -e
 
-          unzip -l \
-            output/base.apk |
-            grep \
-              'assets/effects/invert-flash.xml'
+          APK=output/Alight.Motion.Custom.apk
 
-          unzip -l \
-            output/base.apk |
-            grep \
-              'assets/effects/gradient-map.xml'
+          BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
 
-          unzip -l \
-            output/base.apk |
-            grep \
-              'assets/effects/tv-simulator.xml'
+          PACKAGE="$(
+            printf '%s\n' "$BADGING" |
+            sed -n "s/^package: name='\([^']*\)'.*/\1/p" |
+            head -1
+          )"
 
-      - name: Create split bundle
+          VERSION_CODE="$(
+            printf '%s\n' "$BADGING" |
+            sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p" |
+            head -1
+          )"
+
+          echo "Package: $PACKAGE"
+          echo "versionCode: $VERSION_CODE"
+
+          if [ "$PACKAGE" != "$SOURCE_PACKAGE" ]; then
+            echo "ERROR: package changed from $SOURCE_PACKAGE to $PACKAGE" >&2
+            exit 1
+          fi
+
+          if [ "$PACKAGE" = "$ORIGINAL_PACKAGE" ]; then
+            echo "ERROR: output uses the original package $ORIGINAL_PACKAGE" >&2
+            exit 1
+          fi
+
+          if [ "$VERSION_CODE" != "$SOURCE_VERSION_CODE" ]; then
+            echo "ERROR: versionCode changed from $SOURCE_VERSION_CODE to $VERSION_CODE" >&2
+            exit 1
+          fi
+
+          echo
+          echo "=== CUSTOM EFFECTS ==="
+
+          for EFFECT in patch/effects/*.xml; do
+            NAME="$(basename "$EFFECT")"
+
+            unzip -l "$APK" | grep "assets/effects/$NAME"
+
+            if ! cmp -s "$EFFECT" <(unzip -p "$APK" "assets/effects/$NAME"); then
+              echo "ERROR: assets/effects/$NAME differs from $EFFECT" >&2
+              exit 1
+            fi
+          done
+
+          echo
+          echo "=== NATIVE LIBRARIES ==="
+
+          python3 - <<'PY'
+          from zipfile import ZIP_STORED, ZipFile
+
+          with ZipFile("output/Alight.Motion.Custom.apk") as archive:
+              libraries = [
+                  entry for entry in archive.infolist()
+                  if entry.filename.startswith("lib/") and entry.filename.endswith(".so")
+              ]
+
+              if not libraries:
+                  raise SystemExit("ERROR: no native libraries found")
+
+              compressed = [
+                  entry.filename for entry in libraries
+                  if entry.compress_type != ZIP_STORED
+              ]
+
+              if compressed:
+                  raise SystemExit(
+                      "ERROR: compressed native libraries: " + ", ".join(compressed)
+                  )
+
+              print(f"{len(libraries)} stored native libraries")
+          PY
+
+      - name: Checksums
         run: |
           set -e
 
           cd output
-
-          cat > install.sh <<'EOF'
-          #!/bin/sh
-          set -eu
-
-          if ! command -v adb >/dev/null 2>&1; then
-            echo "ERROR: adb is not installed or is not on PATH." >&2
-            exit 1
-          fi
-
-          SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-
-          adb install-multiple -r \
-            "$SCRIPT_DIR/base.apk" \
-            "$SCRIPT_DIR/split_config.arm64_v8a.apk" \
-            "$SCRIPT_DIR/split_config.en.apk" \
-            "$SCRIPT_DIR/split_config.xxhdpi.apk"
-          EOF
-
-          chmod +x install.sh
-
-          zip \
-            -9 \
-            Alight.Motion.Custom.split-set.zip \
-            base.apk \
-            split_config.arm64_v8a.apk \
-            split_config.en.apk \
-            split_config.xxhdpi.apk \
-            install.sh
-
-          echo
-          echo "=== OUTPUT FILES ==="
+          sha256sum Alight.Motion.Custom.apk | tee Alight.Motion.Custom.apk.sha256
           ls -lh
 
-          echo
-          echo "=== SHA256 ==="
-          sha256sum \
-            base.apk \
-            split_config.arm64_v8a.apk \
-            split_config.en.apk \
-            split_config.xxhdpi.apk \
-            Alight.Motion.Custom.split-set.zip
-
-      - name: Upload split set
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: alight-motion-custom-split-set
+          name: alight-motion-custom
           path: |
-            output/base.apk
-            output/split_config.arm64_v8a.apk
-            output/split_config.en.apk
-            output/split_config.xxhdpi.apk
-            output/install.sh
-            output/Alight.Motion.Custom.split-set.zip
+            output/Alight.Motion.Custom.apk
+            output/Alight.Motion.Custom.apk.sha256
           if-no-files-found: error
           retention-days: 3
