@@ -102,98 +102,22 @@ jobs:
 
           cat source-info.env >> "$GITHUB_ENV"
 
-      - name: Add custom effects
+      # Three builds from the same source, so a crash can be traced:
+      #   resign-only  source APK, only aligned and signed with the clone key
+      #   no-effects   repacked by add-effects.py, no effects added
+      #   (main)       repacked with the custom effects
+      - name: Build variants
         shell: bash
         run: |
           set -e
 
-          python3 - <<'PY'
-          from pathlib import Path
-          from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile, ZipInfo
-          import re
+          cp source.apk resign-only-unsigned.apk
 
-          SOURCE = Path("source.apk")
-          OUTPUT = Path("custom-unsigned.apk")
-          EFFECTS_DIR = Path("patch/effects")
-          TARGET_DIR = "assets/effects/"
+          python3 .github/scripts/add-effects.py \
+            source.apk no-effects-unsigned.apk
 
-          effects = sorted(EFFECTS_DIR.glob("*.xml"))
-          if not effects:
-              raise SystemExit(f"ERROR: no effect files found in {EFFECTS_DIR}")
-
-          new_names = {TARGET_DIR + path.name for path in effects}
-
-          # Only the old signature is dropped. Other META-INF entries (service
-          # files, version markers) are part of the app and stay.
-          signature = re.compile(
-              r"^META-INF/(MANIFEST\.MF|[^/]+\.(SF|RSA|DSA|EC))$"
-          )
-
-          kept = 0
-          replaced = 0
-          dropped_signature = 0
-
-          with ZipFile(SOURCE) as src, ZipFile(OUTPUT, "w") as dst:
-              for info in src.infolist():
-                  if signature.match(info.filename):
-                      dropped_signature += 1
-                      continue
-
-                  if info.filename in new_names:
-                      replaced += 1
-                      continue
-
-                  # Copy each entry with its original compression method so
-                  # resources.arsc and the native libraries stay stored.
-                  copy = ZipInfo(info.filename, date_time=info.date_time)
-                  copy.compress_type = info.compress_type
-                  copy.external_attr = info.external_attr
-                  copy.create_system = info.create_system
-                  dst.writestr(copy, src.read(info.filename))
-                  kept += 1
-
-              for path in effects:
-                  entry = ZipInfo(TARGET_DIR + path.name, date_time=(1981, 1, 1, 1, 1, 1))
-                  entry.compress_type = ZIP_DEFLATED
-                  entry.external_attr = 0o644 << 16
-                  dst.writestr(entry, path.read_bytes())
-                  print("Added:", entry.filename)
-
-          print("Entries copied unchanged:", kept)
-          print("Existing effect entries replaced:", replaced)
-          print("Old signature entries dropped:", dropped_signature)
-
-          # Prove nothing else changed.
-          with ZipFile(SOURCE) as before, ZipFile(OUTPUT) as after:
-              after_entries = {entry.filename: entry for entry in after.infolist()}
-
-              for entry in before.infolist():
-                  name = entry.filename
-                  if signature.match(name) or name in new_names:
-                      continue
-
-                  rebuilt = after_entries.get(name)
-                  if rebuilt is None:
-                      raise SystemExit(f"ERROR: lost {name}")
-
-                  if (rebuilt.CRC, rebuilt.file_size, rebuilt.compress_type) != (
-                      entry.CRC,
-                      entry.file_size,
-                      entry.compress_type,
-                  ):
-                      raise SystemExit(f"ERROR: changed {name}")
-
-              for path in effects:
-                  rebuilt = after_entries.get(TARGET_DIR + path.name)
-                  if rebuilt is None or after.read(rebuilt) != path.read_bytes():
-                      raise SystemExit(f"ERROR: {path.name} was not added correctly")
-
-              resources = after_entries.get("resources.arsc")
-              if resources is None or resources.compress_type != ZIP_STORED:
-                  raise SystemExit("ERROR: resources.arsc must stay stored")
-
-          print("Verified every original entry is unchanged.")
-          PY
+          python3 .github/scripts/add-effects.py \
+            source.apk custom-unsigned.apk patch/effects
 
       - name: Prepare clone signing key
         env:
@@ -248,7 +172,7 @@ jobs:
         run: |
           set -e
 
-          mkdir -p output
+          mkdir -p output aligned
 
           # Signature schemes v2/v3 need Android 7.0 (API 24). Only add the
           # older JAR signature when the app still supports earlier releases.
@@ -260,106 +184,80 @@ jobs:
 
           echo "minSdkVersion: $SOURCE_MIN_SDK (v1 signing: $V1_SIGNING)"
 
-          echo
-          echo "=== ALIGNING ==="
+          align_sign () {
+            INPUT="$1"
+            OUTPUT="$2"
+            ALIGNED="aligned/$(basename "$OUTPUT")"
 
-          # -P 16 page-aligns stored native libraries, which the app needs
-          # because it ships them uncompressed (extractNativeLibs=false).
-          "$BUILD_TOOLS/zipalign" \
-            -f \
-            -P 16 \
-            4 \
-            custom-unsigned.apk \
-            custom-aligned.apk
+            echo
+            echo "=== ALIGNING $OUTPUT ==="
 
-          echo
-          echo "=== SIGNING ==="
+            # -P 16 page-aligns stored native libraries, which the app needs
+            # because it ships them uncompressed (extractNativeLibs=false).
+            "$BUILD_TOOLS/zipalign" -f -P 16 4 "$INPUT" "$ALIGNED"
 
-          "$BUILD_TOOLS/apksigner" sign \
-            --ks patch.keystore \
-            --ks-key-alias "$PATCH_KEY_ALIAS" \
-            --ks-pass "pass:$PATCH_KEYSTORE_PASSWORD" \
-            --key-pass "pass:$PATCH_KEY_PASSWORD" \
-            --min-sdk-version "$SOURCE_MIN_SDK" \
-            --v1-signing-enabled "$V1_SIGNING" \
-            --v2-signing-enabled true \
-            --v3-signing-enabled true \
-            --out output/Alight.Motion.Custom.apk \
-            custom-aligned.apk
+            echo "=== SIGNING $OUTPUT ==="
 
-          echo
-          echo "=== VERIFYING SIGNATURE ==="
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks patch.keystore \
+              --ks-key-alias "$PATCH_KEY_ALIAS" \
+              --ks-pass "pass:$PATCH_KEYSTORE_PASSWORD" \
+              --key-pass "pass:$PATCH_KEY_PASSWORD" \
+              --min-sdk-version "$SOURCE_MIN_SDK" \
+              --v1-signing-enabled "$V1_SIGNING" \
+              --v2-signing-enabled true \
+              --v3-signing-enabled true \
+              --out "$OUTPUT" \
+              "$ALIGNED"
 
-          "$BUILD_TOOLS/apksigner" verify \
-            --min-sdk-version "$SOURCE_MIN_SDK" \
-            --verbose \
-            --print-certs \
-            output/Alight.Motion.Custom.apk
+            "$BUILD_TOOLS/apksigner" verify \
+              --min-sdk-version "$SOURCE_MIN_SDK" \
+              --verbose \
+              --print-certs \
+              "$OUTPUT"
 
-          echo
-          echo "=== VERIFYING ALIGNMENT ==="
+            "$BUILD_TOOLS/zipalign" -c -P 16 4 "$OUTPUT"
+            echo "Alignment OK"
+          }
 
-          "$BUILD_TOOLS/zipalign" \
-            -c \
-            -P 16 \
-            -v \
-            4 \
-            output/Alight.Motion.Custom.apk |
-            tail -5
+          align_sign custom-unsigned.apk output/Alight.Motion.Custom.apk
+          align_sign no-effects-unsigned.apk output/Alight.Motion.Custom.no-effects.apk
+          align_sign resign-only-unsigned.apk output/Alight.Motion.Custom.resign-only.apk
 
       - name: Verify output
         shell: bash
         run: |
           set -e
 
-          APK=output/Alight.Motion.Custom.apk
-
           export BUILD_TOOLS
-          .github/scripts/apk-info.sh "$APK" OUTPUT_ | tee output-info.env
-          . ./output-info.env
 
-          PACKAGE="$OUTPUT_PACKAGE"
-          VERSION_CODE="$OUTPUT_VERSION_CODE"
+          for APK in output/*.apk; do
+            echo
+            echo "===== $APK ====="
 
-          echo "Package: $PACKAGE"
-          echo "versionCode: $VERSION_CODE"
+            .github/scripts/apk-info.sh "$APK" OUTPUT_ | tee output-info.env
+            . ./output-info.env
 
-          if [ "$PACKAGE" != "$SOURCE_PACKAGE" ]; then
-            echo "ERROR: package changed from $SOURCE_PACKAGE to $PACKAGE" >&2
-            exit 1
-          fi
-
-          if [ "$PACKAGE" = "$ORIGINAL_PACKAGE" ]; then
-            echo "ERROR: output uses the original package $ORIGINAL_PACKAGE" >&2
-            exit 1
-          fi
-
-          if [ "$VERSION_CODE" != "$SOURCE_VERSION_CODE" ]; then
-            echo "ERROR: versionCode changed from $SOURCE_VERSION_CODE to $VERSION_CODE" >&2
-            exit 1
-          fi
-
-          echo
-          echo "=== CUSTOM EFFECTS ==="
-
-          for EFFECT in patch/effects/*.xml; do
-            NAME="$(basename "$EFFECT")"
-
-            unzip -l "$APK" | grep "assets/effects/$NAME"
-
-            if ! cmp -s "$EFFECT" <(unzip -p "$APK" "assets/effects/$NAME"); then
-              echo "ERROR: assets/effects/$NAME differs from $EFFECT" >&2
+            if [ "$OUTPUT_PACKAGE" != "$SOURCE_PACKAGE" ]; then
+              echo "ERROR: package changed from $SOURCE_PACKAGE to $OUTPUT_PACKAGE" >&2
               exit 1
             fi
-          done
 
-          echo
-          echo "=== NATIVE LIBRARIES ==="
+            if [ "$OUTPUT_PACKAGE" = "$ORIGINAL_PACKAGE" ]; then
+              echo "ERROR: output uses the original package $ORIGINAL_PACKAGE" >&2
+              exit 1
+            fi
 
-          python3 - <<'PY'
+            if [ "$OUTPUT_VERSION_CODE" != "$SOURCE_VERSION_CODE" ]; then
+              echo "ERROR: versionCode changed from $SOURCE_VERSION_CODE to $OUTPUT_VERSION_CODE" >&2
+              exit 1
+            fi
+
+            python3 - "$APK" <<'PY'
+          import sys
           from zipfile import ZIP_STORED, ZipFile
 
-          with ZipFile("output/Alight.Motion.Custom.apk") as archive:
+          with ZipFile(sys.argv[1]) as archive:
               libraries = [
                   entry for entry in archive.infolist()
                   if entry.filename.startswith("lib/") and entry.filename.endswith(".so")
@@ -380,13 +278,41 @@ jobs:
 
               print(f"{len(libraries)} stored native libraries")
           PY
+          done
+
+          echo
+          echo "=== CUSTOM EFFECTS (main build only) ==="
+
+          for EFFECT in patch/effects/*.xml; do
+            NAME="$(basename "$EFFECT")"
+            APK=output/Alight.Motion.Custom.apk
+
+            unzip -l "$APK" | grep "assets/effects/$NAME"
+
+            if ! cmp -s "$EFFECT" <(unzip -p "$APK" "assets/effects/$NAME"); then
+              echo "ERROR: assets/effects/$NAME differs from $EFFECT" >&2
+              exit 1
+            fi
+
+            for CONTROL in output/Alight.Motion.Custom.no-effects.apk output/Alight.Motion.Custom.resign-only.apk; do
+              if unzip -l "$CONTROL" | grep -q "assets/effects/$NAME"; then
+                echo "ERROR: $CONTROL unexpectedly contains $NAME" >&2
+                exit 1
+              fi
+            done
+          done
 
       - name: Checksums
         run: |
           set -e
 
           cd output
-          sha256sum Alight.Motion.Custom.apk | tee Alight.Motion.Custom.apk.sha256
+
+          for APK in *.apk; do
+            sha256sum "$APK" > "$APK.sha256"
+            cat "$APK.sha256"
+          done
+
           ls -lh
 
       # The APK goes to a release rather than an Actions artifact: artifact
@@ -405,7 +331,10 @@ jobs:
               "$SOURCE_PACKAGE" "$SOURCE_VERSION_NAME" "$SOURCE_VERSION_CODE"
             printf 'Built by %s/%s/actions/runs/%s\n\n' \
               "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
-            printf 'SHA-256:\n%s\n' "$(cat output/Alight.Motion.Custom.apk.sha256)"
+            printf 'Alight.Motion.Custom.apk: custom effects added (use this one).\n'
+            printf 'Alight.Motion.Custom.no-effects.apk: control, same repack without effects.\n'
+            printf 'Alight.Motion.Custom.resign-only.apk: control, source APK only re-signed.\n\n'
+            printf 'SHA-256:\n%s\n' "$(cat output/*.sha256)"
           )"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -417,9 +346,6 @@ jobs:
               --target "$GITHUB_SHA"
           fi
 
-          gh release upload "$TAG" \
-            output/Alight.Motion.Custom.apk \
-            output/Alight.Motion.Custom.apk.sha256 \
-            --clobber
+          gh release upload "$TAG" output/* --clobber
 
           echo "Published release $TAG"
