@@ -17,7 +17,7 @@
     </params>
     <shader type="fragment" precision="high"><![CDATA[
         void main() {
-            vec4 c = texture2DCv(inputImg.texture, acScreenNorm);
+            vec4 c = texture2D(inputImg.texture, acScreenNorm);
             float cycle = fract(acTime * frequency + phase);
             if (cycle < duty) {
                 c.rgb = vec3(c.a) - c.rgb;

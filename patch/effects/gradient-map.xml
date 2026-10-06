@@ -35,7 +35,7 @@
         }
 
         void main() {
-            vec4 src = texture2DCv(inputImg.texture, acScreenNorm);
+            vec4 src = texture2D(inputImg.texture, acScreenNorm);
             float a = src.a;
             vec3 straight = src.rgb / max(a, 0.0001);
             float y = dot(straight, LUMA);

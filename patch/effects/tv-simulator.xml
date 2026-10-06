@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8' ?>
-<effect id="com.wowmancode.effects.tvsimulator" name="@string/name" desc="@string/desc" category="distortion" tags="glitch,retro,raster,distortion,color" thumb="thumb/grunge.webp">
+<effect id="com.wowmancode.effects.tvsimulator" name="@string/name" desc="@string/desc" category="distort" tags="glitch,retro,raster,distort,color" thumb="thumb/grunge.webp">
     <strings>
         <locale lang="en">
             <string name="name">TV Simulator</string>
@@ -84,7 +84,7 @@
             float jitterPx = lineNoise(row, acTime) * 22.0;
             centered.x += jitterPx / 1920.0;
 
-            vec4 src = texture2DCv(inputImg.texture, centered);
+            vec4 src = texture2D(inputImg.texture, centered);
             float a = src.a;
             vec3 straight = src.rgb / max(a, 0.0001);
 
