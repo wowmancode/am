@@ -69,69 +69,37 @@ jobs:
           set -e
 
           BUILD_TOOLS="$(
-            find "$ANDROID_HOME/build-tools" \
+            find "${ANDROID_HOME:-/nonexistent}/build-tools" \
               -mindepth 1 \
               -maxdepth 1 \
-              -type d |
+              -type d 2>/dev/null |
             sort -V |
-            tail -1
+            tail -n 1
           )"
 
-          echo "BUILD_TOOLS=$BUILD_TOOLS" >> "$GITHUB_ENV"
-
-          echo "Build tools: $BUILD_TOOLS"
-          "$BUILD_TOOLS/aapt2" version
-
-          BADGING="$("$BUILD_TOOLS/aapt2" dump badging source.apk)"
-
-          SOURCE_PACKAGE="$(
-            printf '%s\n' "$BADGING" |
-            sed -n "s/^package: name='\([^']*\)'.*/\1/p" |
-            head -1
-          )"
-
-          SOURCE_VERSION_CODE="$(
-            printf '%s\n' "$BADGING" |
-            sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p" |
-            head -1
-          )"
-
-          SOURCE_VERSION_NAME="$(
-            printf '%s\n' "$BADGING" |
-            sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p" |
-            head -1
-          )"
-
-          SOURCE_MIN_SDK="$(
-            printf '%s\n' "$BADGING" |
-            sed -n "s/^sdkVersion:'\([^']*\)'.*/\1/p" |
-            head -1
-          )"
-
-          echo "Source package: ${SOURCE_PACKAGE:-<missing>}"
-          echo "Source versionCode: ${SOURCE_VERSION_CODE:-<missing>}"
-          echo "Source versionName: ${SOURCE_VERSION_NAME:-<not set>}"
-          echo "Source minSdkVersion: ${SOURCE_MIN_SDK:-<missing>}"
-
-          if [ -z "$SOURCE_PACKAGE" ] || \
-             [ -z "$SOURCE_VERSION_CODE" ] || \
-             [ -z "$SOURCE_MIN_SDK" ]; then
-            echo "ERROR: failed to read package metadata from source.apk" >&2
+          if [ -z "$BUILD_TOOLS" ]; then
+            echo "::error::No Android build-tools found under ANDROID_HOME=${ANDROID_HOME:-<unset>}"
             exit 1
           fi
+
+          echo "BUILD_TOOLS=$BUILD_TOOLS" >> "$GITHUB_ENV"
+          echo "Build tools: $BUILD_TOOLS"
+
+          export BUILD_TOOLS
+          .github/scripts/apk-info.sh source.apk SOURCE_ | tee source-info.env
+
+          # shellcheck disable=SC1091
+          . ./source-info.env
 
           # The whole point of the clone is to install next to the official
           # app. If the release holds an unpatched APK, stop here instead of
           # shipping something that would replace or conflict with it.
           if [ "$SOURCE_PACKAGE" = "$ORIGINAL_PACKAGE" ]; then
-            echo "ERROR: source.apk still uses the original package $ORIGINAL_PACKAGE; expected a Morphe-patched clone" >&2
+            echo "::error::source.apk still uses the original package $ORIGINAL_PACKAGE; expected a Morphe-patched clone"
             exit 1
           fi
 
-          echo "SOURCE_PACKAGE=$SOURCE_PACKAGE" >> "$GITHUB_ENV"
-          echo "SOURCE_VERSION_CODE=$SOURCE_VERSION_CODE" >> "$GITHUB_ENV"
-          echo "SOURCE_VERSION_NAME=$SOURCE_VERSION_NAME" >> "$GITHUB_ENV"
-          echo "SOURCE_MIN_SDK=$SOURCE_MIN_SDK" >> "$GITHUB_ENV"
+          cat source-info.env >> "$GITHUB_ENV"
 
       - name: Add custom effects
         shell: bash
@@ -345,19 +313,12 @@ jobs:
 
           APK=output/Alight.Motion.Custom.apk
 
-          BADGING="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
+          export BUILD_TOOLS
+          .github/scripts/apk-info.sh "$APK" OUTPUT_ | tee output-info.env
+          . ./output-info.env
 
-          PACKAGE="$(
-            printf '%s\n' "$BADGING" |
-            sed -n "s/^package: name='\([^']*\)'.*/\1/p" |
-            head -1
-          )"
-
-          VERSION_CODE="$(
-            printf '%s\n' "$BADGING" |
-            sed -n "s/^package:.*versionCode='\([^']*\)'.*/\1/p" |
-            head -1
-          )"
+          PACKAGE="$OUTPUT_PACKAGE"
+          VERSION_CODE="$OUTPUT_VERSION_CODE"
 
           echo "Package: $PACKAGE"
           echo "versionCode: $VERSION_CODE"
