@@ -3,35 +3,109 @@
     <strings>
         <locale lang="en">
             <string name="name">Gradient Map</string>
-            <string name="desc">Maps image luminance through a customizable four-color gradient.</string>
-            <string name="shadow">Shadow Color</string>
-            <string name="midtone1">Lower Midtone</string>
-            <string name="midtone2">Upper Midtone</string>
-            <string name="highlight">Highlight Color</string>
+            <string name="desc">Maps image luminance through a gradient of 2 to 8 color points.</string>
+            <string name="points">Points</string>
             <string name="reverse">Reverse</string>
             <string name="blend">Blend</string>
+            <string name="point1">Point 1</string>
+            <string name="point2">Point 2</string>
+            <string name="point3">Point 3 (used when Points is 3 or more)</string>
+            <string name="point4">Point 4 (used when Points is 4 or more)</string>
+            <string name="point5">Point 5 (used when Points is 5 or more)</string>
+            <string name="point6">Point 6 (used when Points is 6 or more)</string>
+            <string name="point7">Point 7 (used when Points is 7 or more)</string>
+            <string name="point8">Point 8 (used when Points is 8 or more)</string>
+            <string name="color1">Point 1 Color</string>
+            <string name="pos1">Point 1 Position</string>
+            <string name="color2">Point 2 Color</string>
+            <string name="pos2">Point 2 Position</string>
+            <string name="color3">Point 3 Color</string>
+            <string name="pos3">Point 3 Position</string>
+            <string name="color4">Point 4 Color</string>
+            <string name="pos4">Point 4 Position</string>
+            <string name="color5">Point 5 Color</string>
+            <string name="pos5">Point 5 Position</string>
+            <string name="color6">Point 6 Color</string>
+            <string name="pos6">Point 6 Position</string>
+            <string name="color7">Point 7 Color</string>
+            <string name="pos7">Point 7 Position</string>
+            <string name="color8">Point 8 Color</string>
+            <string name="pos8">Point 8 Position</string>
         </locale>
     </strings>
     <params>
         <texture id="inputImg" srcType="content" />
-        <color id="shadow" default="#FF000000" label="@string/shadow" alpha="false" />
-        <color id="midtone1" default="#FF6A00FF" label="@string/midtone1" alpha="false" />
-        <color id="midtone2" default="#FFFF5A00" label="@string/midtone2" alpha="false" />
-        <color id="highlight" default="#FFFFFFFF" label="@string/highlight" alpha="false" />
+        <!-- Raise Points to add a point, lower it to remove the last one. -->
+        <spinner id="points" default="4" min="2" max="8" step="1" label="@string/points" />
         <switch id="reverse" default="false" label="@string/reverse" />
         <spinner id="blend" default="1.0" min="0.0" max="1.0" step="0.01" label="@string/blend" type="percent" />
+        <section id="sec1" text="@string/point1" />
+        <color id="color1" default="#FF000000" label="@string/color1" alpha="false" />
+        <spinner id="pos1" default="0.0" min="0.0" max="1.0" step="0.001" label="@string/pos1" type="percent" />
+        <section id="sec2" text="@string/point2" />
+        <color id="color2" default="#FF6A00FF" label="@string/color2" alpha="false" />
+        <spinner id="pos2" default="0.3333" min="0.0" max="1.0" step="0.001" label="@string/pos2" type="percent" />
+        <section id="sec3" text="@string/point3" />
+        <color id="color3" default="#FFFF5A00" label="@string/color3" alpha="false" />
+        <spinner id="pos3" default="0.6667" min="0.0" max="1.0" step="0.001" label="@string/pos3" type="percent" />
+        <section id="sec4" text="@string/point4" />
+        <color id="color4" default="#FFFFFFFF" label="@string/color4" alpha="false" />
+        <spinner id="pos4" default="1.0" min="0.0" max="1.0" step="0.001" label="@string/pos4" type="percent" />
+        <section id="sec5" text="@string/point5" />
+        <color id="color5" default="#FFFFD400" label="@string/color5" alpha="false" />
+        <spinner id="pos5" default="0.5" min="0.0" max="1.0" step="0.001" label="@string/pos5" type="percent" />
+        <section id="sec6" text="@string/point6" />
+        <color id="color6" default="#FF00C2FF" label="@string/color6" alpha="false" />
+        <spinner id="pos6" default="0.1667" min="0.0" max="1.0" step="0.001" label="@string/pos6" type="percent" />
+        <section id="sec7" text="@string/point7" />
+        <color id="color7" default="#FFFF2E88" label="@string/color7" alpha="false" />
+        <spinner id="pos7" default="0.8333" min="0.0" max="1.0" step="0.001" label="@string/pos7" type="percent" />
+        <section id="sec8" text="@string/point8" />
+        <color id="color8" default="#FF39FF14" label="@string/color8" alpha="false" />
+        <spinner id="pos8" default="0.25" min="0.0" max="1.0" step="0.001" label="@string/pos8" type="percent" />
     </params>
     <shader type="fragment" precision="high"><![CDATA[
         const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
 
         vec3 gradientAt(float t) {
-            t = clamp(t, 0.0, 1.0);
-            if (t < 0.3333333) {
-                return mix(shadow.rgb, midtone1.rgb, t * 3.0);
-            } else if (t < 0.6666667) {
-                return mix(midtone1.rgb, midtone2.rgb, (t - 0.3333333) * 3.0);
+            float n = floor(points + 0.5);
+            float p[8];
+            vec3 c[8];
+            p[0] = pos1; c[0] = color1.rgb;
+            p[1] = pos2; c[1] = color2.rgb;
+            p[2] = pos3; c[2] = color3.rgb;
+            p[3] = pos4; c[3] = color4.rgb;
+            p[4] = pos5; c[4] = color5.rgb;
+            p[5] = pos6; c[5] = color6.rgb;
+            p[6] = pos7; c[6] = color7.rgb;
+            p[7] = pos8; c[7] = color8.rgb;
+
+            // Points past the count move to the end so sorting ignores them.
+            for (int i = 0; i < 8; i++) {
+                if (float(i) >= n) p[i] = 2.0;
             }
-            return mix(midtone2.rgb, highlight.rgb, (t - 0.6666667) * 3.0);
+
+            // Sort points by position, so they can be entered in any order.
+            for (int i = 0; i < 7; i++) {
+                for (int j = 0; j < 7; j++) {
+                    if (j < 7 - i && p[j] > p[j + 1]) {
+                        float tp = p[j]; p[j] = p[j + 1]; p[j + 1] = tp;
+                        vec3 tc = c[j]; c[j] = c[j + 1]; c[j + 1] = tc;
+                    }
+                }
+            }
+
+            t = clamp(t, 0.0, 1.0);
+            if (t <= p[0]) return c[0];
+            vec3 result = c[0];
+            for (int i = 0; i < 7; i++) {
+                if (float(i + 1) >= n) break;
+                result = c[i + 1];
+                if (t <= p[i + 1]) {
+                    return mix(c[i], c[i + 1], clamp((t - p[i]) / max(p[i + 1] - p[i], 0.00001), 0.0, 1.0));
+                }
+            }
+            return result;
         }
 
         void main() {

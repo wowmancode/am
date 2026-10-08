@@ -122,13 +122,38 @@ jobs:
           python3 .github/scripts/add-effects.py sig source.apk patch/effects | tee sig.env
           cat sig.env >> "$GITHUB_ENV"
 
-      - name: Rebuild DEX with updated signature
+      # The package rename renamed the FileProvider authority in the
+      # manifest, but the code still asks for the original one. Android then
+      # throws when the app shares a file, e.g. right after an export
+      # finishes, so point the code at the authority the manifest declares.
+      - name: Read FileProvider authority
         shell: bash
         run: |
           set -e
-          .github/scripts/rebuild-sig-dex.sh \
-            source.apk "$OLD_EFFECT_SIG" "$NEW_EFFECT_SIG" rebuilt-dex |
-            tee dex.env
+          ANALYZER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name apkanalyzer | sort -V | tail -n 1)"
+          "$ANALYZER" manifest print source.apk > manifest.xml
+          AUTHORITY="$(python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+          A = "{http://schemas.android.com/apk/res/android}"
+          found = [p.get(A + "authorities") for p in ET.parse("manifest.xml").iter("provider")
+                   if p.get(A + "name") == "androidx.core.content.FileProvider"]
+          if len(found) != 1:
+              raise SystemExit(f"expected one FileProvider, found {found}")
+          print(found[0])
+          PY
+          )"
+          echo "FileProvider authority: $AUTHORITY"
+          echo "FILEPROVIDER_AUTHORITY=$AUTHORITY" >> "$GITHUB_ENV"
+
+      - name: Rebuild DEX
+        shell: bash
+        run: |
+          set -e
+          PAIRS=("$OLD_EFFECT_SIG=$NEW_EFFECT_SIG")
+          if [ "$FILEPROVIDER_AUTHORITY" != "com.alightcreative.app.motion.fileprovider" ]; then
+            PAIRS+=("com.alightcreative.app.motion.fileprovider=$FILEPROVIDER_AUTHORITY")
+          fi
+          .github/scripts/rebuild-dex.sh source.apk rebuilt-dex "${PAIRS[@]}" | tee dex.env
           cat dex.env >> "$GITHUB_ENV"
 
       - name: Add custom effects
@@ -136,11 +161,16 @@ jobs:
         run: |
           set -e
 
+          DEX_ARGS=()
+          for DEX in $DEX_NAMES; do
+            DEX_ARGS+=(--dex "$DEX=rebuilt-dex/$DEX")
+          done
+
           python3 .github/scripts/add-effects.py build \
             source.apk \
             custom-unsigned.apk \
             patch/effects \
-            --dex "$DEX_NAME=rebuilt-dex/$DEX_NAME"
+            "${DEX_ARGS[@]}"
 
       - name: Prepare clone signing key
         env:

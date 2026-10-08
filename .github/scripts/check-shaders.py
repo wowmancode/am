@@ -56,7 +56,7 @@ GLSL_TYPES = {
     "point": "vec2",
 }
 # Parameters that produce no uniform.
-NO_UNIFORM = {"statictext"}
+NO_UNIFORM = {"tip", "section"}
 
 PRECISION = {"high": "highp", "low": "lowp"}
 
