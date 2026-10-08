@@ -22,7 +22,9 @@ from __future__ import annotations
 
 import hashlib
 import re
+import struct
 import sys
+import zlib
 from pathlib import Path
 from zipfile import ZipFile, ZipInfo
 
@@ -40,6 +42,26 @@ OLD_SIG = "F14CEE321924058BE7D1730D5B696A8DEA1E7462695B6E7E03C6C79054C6453B"
 SIGNATURE_RE = re.compile(
     r"^META-INF/(MANIFEST\.MF|[^/]+\.(SF|RSA|DSA|EC))$"
 )
+
+
+def fix_dex_checksums(data: bytearray) -> bytearray:
+    """Recompute the SHA-1 signature and Adler32 checksum in a DEX header.
+
+    DEX header layout (first 36 bytes):
+      0- 7: magic (e.g. "dex\\n039\\0")
+      8-11: Adler32 checksum  (over bytes 12..EOF)
+     12-31: SHA-1 signature   (over bytes 32..EOF)
+     32-35: file_size
+    """
+    # 1. SHA-1 signature over bytes 32..end → written at offset 12.
+    sha1 = hashlib.sha1(data[32:]).digest()          # 20 bytes
+    data[12:32] = sha1
+
+    # 2. Adler32 checksum over bytes 12..end → written at offset 8.
+    checksum = zlib.adler32(bytes(data[12:])) & 0xFFFFFFFF
+    struct.pack_into("<I", data, 8, checksum)
+
+    return data
 
 
 def compute_effect_sig(apk: ZipFile) -> str:
@@ -96,11 +118,14 @@ def main() -> None:
         for info in src.infolist():
             data = src.read(info.filename)
 
-            # Patch DEX files that contain the hardcoded signature.
+            # Patch DEX files that contain the hardcoded signature,
+            # then recompute the DEX-internal checksums so Android
+            # accepts the modified file.
             if info.filename.endswith(".dex") and old_bytes in data:
                 count = data.count(old_bytes)
                 data = data.replace(old_bytes, new_bytes)
-                print(f"  Patched {info.filename}: {count} occurrence(s)")
+                data = bytes(fix_dex_checksums(bytearray(data)))
+                print(f"  Patched {info.filename}: {count} occurrence(s), checksums updated")
                 patched_dex += 1
 
             copy = ZipInfo(info.filename, date_time=info.date_time)
