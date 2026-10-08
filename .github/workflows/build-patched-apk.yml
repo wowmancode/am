@@ -38,6 +38,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # A shader that doesn't compile only fails once the app runs, so
+      # compile every custom effect exactly the way the app assembles it.
+      - name: Compile effect shaders
+        run: |
+          set -e
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq glslang-tools >/dev/null
+          python3 .github/scripts/check-shaders.py patch/effects/*.xml
+
       - name: Download Morphe-patched APK
         env:
           GH_TOKEN: ${{ github.token }}

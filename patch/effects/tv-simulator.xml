@@ -3,7 +3,12 @@
     <strings>
         <locale lang="en">
             <string name="name">TV Simulator</string>
-            <string name="desc">Analog CRT television simulation with grille, interlacing, sync distortion, scan phasing, phosphorescence, and static.</string>
+            <string name="desc">Port of the Sony Vegas TV Simulator: aperture grille, interlacing, line and vertical sync errors, scan phasing, phosphorescence and static.</string>
+            <string name="preset">Preset</string>
+            <string name="presetCustom">Custom (use sliders)</string>
+            <string name="presetTvLook">TV Look</string>
+            <string name="presetBadSync">Bad Sync</string>
+            <string name="presetNone">None</string>
             <string name="detailZoom">Detail Zoom</string>
             <string name="apertureGrill">Aperture Grille</string>
             <string name="interlacing">Interlacing</string>
@@ -16,105 +21,210 @@
     </strings>
     <params>
         <texture id="inputImg" srcType="content" />
-        <spinner id="detailZoom" default="1.0" min="1.0" max="4.0" step="0.01" label="@string/detailZoom" />
-        <spinner id="apertureGrill" default="0.316" min="0.0" max="1.0" step="0.001" label="@string/apertureGrill" type="percent" />
-        <spinner id="interlacing" default="0.66" min="0.0" max="1.0" step="0.001" label="@string/interlacing" type="percent" />
-        <spinner id="lineSync" default="1.0" min="0.0" max="1.0" step="0.001" label="@string/lineSync" type="percent" />
-        <spinner id="verticalSync" default="1.0" min="0.0" max="1.0" step="0.001" label="@string/verticalSync" type="percent" />
-        <spinner id="scanPhasing" default="0.15" min="0.0" max="1.0" step="0.001" label="@string/scanPhasing" type="percent" />
-        <spinner id="phosphorescence" default="0.9" min="0.0" max="1.0" step="0.001" label="@string/phosphorescence" type="percent" />
-        <spinner id="statik" default="0.0" min="0.0" max="1.0" step="0.001" label="@string/static" type="percent" />
+        <selector id="preset" default="0" style="dropdown" label="@string/preset">
+            <choice label="@string/presetCustom" value="0" />
+            <choice label="@string/presetTvLook" value="1" />
+            <choice label="@string/presetBadSync" value="2" />
+            <choice label="@string/presetNone" value="3" />
+        </selector>
+        <!-- Ranges match the original dialog: Detail Zoom 1..4, the rest 0..1.
+             Line Sync and Vertical Sync are stability controls: 1 is neutral.
+             Slider defaults are the original TV Look preset. -->
+        <spinner id="detailZoom" default="1.0" min="1.0" max="4.0" step="0.002" label="@string/detailZoom" />
+        <spinner id="apertureGrill" default="0.316" min="0.0" max="1.0" step="0.002" label="@string/apertureGrill" type="percent" />
+        <spinner id="interlacing" default="0.66" min="0.0" max="1.0" step="0.002" label="@string/interlacing" type="percent" />
+        <spinner id="lineSync" default="1.0" min="0.0" max="1.0" step="0.002" label="@string/lineSync" type="percent" />
+        <spinner id="verticalSync" default="1.0" min="0.0" max="1.0" step="0.002" label="@string/verticalSync" type="percent" />
+        <spinner id="scanPhasing" default="0.15" min="0.0" max="1.0" step="0.002" label="@string/scanPhasing" type="percent" />
+        <spinner id="phosphorescence" default="0.9" min="0.0" max="1.0" step="0.002" label="@string/phosphorescence" type="percent" />
+        <spinner id="statik" default="0.0" min="0.0" max="1.0" step="0.002" label="@string/static" type="percent" />
     </params>
     <shader type="fragment" precision="high"><![CDATA[
-        float hash1(float n) {
-            return fract(sin(n) * 43758.5453123) * 2.0 - 1.0;
+        // Port of veggy-fx's clean-room TV Simulator (recovered from Sony's
+        // vfx1.dll). Work is done in the original's units: pixel
+        // coordinates with the origin at the top-left and 0..255 values.
+
+        // Uniform pseudo-random value in [-1, 1).
+        float hash(vec2 p) {
+            vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+            p3 += dot(p3, p3.yzx + 33.33);
+            return fract((p3.x + p3.y) * p3.z) * 2.0 - 1.0;
         }
 
-        float valueNoise(float x, float seed) {
-            float i = floor(x);
-            float f = fract(x);
-            float u = f * f * (3.0 - 2.0 * f);
-            return mix(hash1(i + seed), hash1(i + 1.0 + seed), u);
+        // The original fills a 64x32 lattice from the MSVC rand() sequence.
+        // GLSL ES 1.00 can't run that 32-bit generator, so each cell uses a
+        // hash with the same uniform [-1, 1) distribution instead.
+        float lattice(float x, float y) {
+            return hash(vec2(mod(x, 32.0), mod(y, 64.0)) + vec2(17.0, 59.0));
         }
 
-        float lineNoise(float row, float t) {
+        float cubic(float p0, float p1, float p2, float p3, float x) {
+            return p1 + 0.5 * x * (p2 - p0 + x * (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3
+                   + x * (3.0 * (p1 - p2) + p3 - p0)));
+        }
+
+        float latticeRow(float ix, float iy, float fx) {
+            return cubic(lattice(ix, iy), lattice(ix + 1.0, iy),
+                         lattice(ix + 2.0, iy), lattice(ix + 3.0, iy), fx);
+        }
+
+        float latticeNoise(float x, float y) {
+            float ix = floor(x) - 1.0;
+            float iy = floor(y) - 1.0;
+            float fx = x - floor(x);
+            float fy = y - floor(y);
+            return cubic(latticeRow(ix, iy, fx), latticeRow(ix, iy + 1.0, fx),
+                         latticeRow(ix, iy + 2.0, fx), latticeRow(ix, iy + 3.0, fx), fy);
+        }
+
+        // Horizontal displacement in pixels for one source scanline.
+        float lineSyncOffset(float row, float h, float w, float t, float zoom, float strength) {
+            if (strength <= 0.0) return 0.0;
             float sum = 0.0;
-            float amp = 1.0 - lineSync;
-            float space = 4.567 / detailZoom;
-            float ts = 6.213;
+            float amp = strength;
+            float space = 4.567 / zoom;
+            float timeScale = 6.213;
             for (int i = 0; i < 6; i++) {
-                sum += amp * valueNoise(row * space * 0.017 + t * ts, 17.0 + float(i) * 53.0);
+                float x = mod(2.0 * (row + 1.0) * space / h, 32.0);
+                float y = mod(2.0 * t * timeScale, 64.0);
+                sum += amp * 0.15 * w * latticeNoise(x, y);
                 amp /= 2.71;
                 space *= 2.231;
-                ts *= 2.142;
+                timeScale *= 2.142;
             }
             return sum;
         }
 
-        float interlaceMask(float y) {
-            float p = mod(y, 10.0);
-            float m = 1.0;
-            if (p < 1.0) m = 0.8;
-            else if (p < 5.0) m = 1.2;
-            else if (p < 6.0) m = 0.8;
-            else if (p < 7.0) m = 0.5;
-            else if (p < 9.0) m = 0.2;
-            else m = 0.5;
-            return mix(1.0, m, interlacing);
+        float smoothNoise(float x, float seed) {
+            float i = floor(x);
+            float f = x - i;
+            float u = f * f * (3.0 - 2.0 * f);
+            return hash(vec2(i, seed)) * (1.0 - u) + hash(vec2(i + 1.0, seed)) * u;
         }
 
-        vec3 grilleMask(float x) {
-            float p = mod(x, 4.0);
-            vec3 m;
-            if (p < 1.0) m = mix(vec3(0.0), vec3(0.75,0.0,0.0), p);
-            else if (p < 2.0) m = mix(vec3(0.75,0.0,0.0), vec3(0.0,0.75,0.0), p-1.0);
-            else if (p < 3.0) m = mix(vec3(0.0,0.75,0.0), vec3(0.0,0.0,0.75), p-2.0);
-            else m = mix(vec3(0.0,0.0,0.75), vec3(0.0), p-3.0);
-            return m;
+        // Interlace table .8 1.2 1.2 1.2 1.2 .8 .5 .2 .2 .5, linearly
+        // interpolated and wrapping.
+        float interlaceEntry(float i) {
+            if (i < 0.5) return 0.8;
+            if (i < 4.5) return 1.2;
+            if (i < 5.5) return 0.8;
+            if (i < 6.5) return 0.5;
+            if (i < 8.5) return 0.2;
+            return 0.5;
+        }
+
+        float interlaceAt(float p) {
+            p = mod(p, 10.0);
+            float i = floor(p);
+            return mix(interlaceEntry(i), interlaceEntry(mod(i + 1.0, 10.0)), p - i);
+        }
+
+        // Scan band table 1 1.7 2.5 1.7 1.
+        float scanEntry(float i) {
+            if (i < 0.5) return 1.0;
+            if (i < 1.5) return 1.7;
+            if (i < 2.5) return 2.5;
+            if (i < 3.5) return 1.7;
+            return 1.0;
+        }
+
+        float scanAt(float p) {
+            p = mod(p, 5.0);
+            float i = floor(p);
+            return mix(scanEntry(i), scanEntry(mod(i + 1.0, 5.0)), p - i);
+        }
+
+        // Five-position aperture grille: black, red, green, blue, black.
+        vec3 grilleEntry(float i) {
+            if (i < 0.5) return vec3(0.0);
+            if (i < 1.5) return vec3(192.0, 0.0, 0.0);
+            if (i < 2.5) return vec3(0.0, 192.0, 0.0);
+            if (i < 3.5) return vec3(0.0, 0.0, 192.0);
+            return vec3(0.0);
+        }
+
+        vec3 grilleAt(float phase) {
+            phase = mod(phase, 4.0);
+            float i = floor(phase);
+            return mix(grilleEntry(i), grilleEntry(i + 1.0), phase - i);
         }
 
         void main() {
-            vec2 uv = acScreenNorm;
-            vec2 centered = (uv - vec2(0.5)) / detailZoom + vec2(0.5);
+            float zoom = detailZoom;
+            float grill = apertureGrill;
+            float inter = interlacing;
+            float lineS = lineSync;
+            float vertS = verticalSync;
+            float scanP = scanPhasing;
+            float phos = phosphorescence;
+            float stat = statik;
 
-            float verticalStrength = 1.0 - verticalSync;
-            centered.y = fract(centered.y + verticalStrength * fract(acTime * 0.3333333 + 0.137));
+            // Original preset vectors, in dialog order.
+            if (preset == 1) {
+                zoom = 1.0; grill = 0.316; inter = 0.66; lineS = 1.0;
+                vertS = 1.0; scanP = 0.15; phos = 0.9; stat = 0.0;
+            } else if (preset == 2) {
+                zoom = 1.0; grill = 0.316; inter = 0.78; lineS = 0.32;
+                vertS = 0.254; scanP = 0.2; phos = 0.5; stat = 0.0;
+            } else if (preset == 3) {
+                zoom = 1.0; grill = 0.0; inter = 0.0; lineS = 1.0;
+                vertS = 1.0; scanP = 0.0; phos = 0.0; stat = 0.0;
+            }
+            zoom = max(zoom, 1.0);
 
-            float row = centered.y * 1080.0;
-            float jitterPx = lineNoise(row, acTime) * 22.0;
-            centered.x += jitterPx / 1920.0;
+            float w = acScreenSize.x;
+            float h = acScreenSize.y;
+            float t = acTime;
 
-            vec4 src = texture2D(inputImg.texture, centered);
-            float a = src.a;
-            vec3 straight = src.rgb / max(a, 0.0001);
+            // Pixel coordinates as the original sees them.
+            float x = acScreenNorm.x * w - 0.5;
+            float y = (1.0 - acScreenNorm.y) * h - 0.5;
+            float cx = (w - 1.0) * 0.5;
+            float cy = (h - 1.0) * 0.5;
 
-            float scan = interlaceMask(row);
-            if (scanPhasing > 0.0001) {
-                float phase = fract(acTime * 3.0 * scanPhasing);
-                float d = abs(centered.y - phase);
-                d = min(d, 1.0 - d);
-                float band = smoothstep(0.175, 0.0, d);
-                scan *= mix(1.0, 2.5, band);
+            float grilleStep = 10.0 / (2.0 * h * 0.011127083333333334) / zoom;
+            float aperture = 0.75 * max(grill, stat);
+
+            float phosJitter = hash(vec2(floor(t * 1000.0), 7.0)) * 0.05 * phos;
+            vec3 phosGamma = clamp(vec3(1.0 - 0.6 * phos, 1.0 - 0.5 * phos, 1.0 - 0.15 * phos)
+                                   + phosJitter, 0.05, 2.0);
+
+            float verticalRoll = (1.0 - vertS) * h * fract(t * 0.3333333 + 0.137);
+
+            float sy = mod((y - cy) / zoom + cy + verticalRoll, h);
+            float jitter = lineSyncOffset(floor(sy), h, w, t, zoom, 1.0 - lineS);
+
+            float scan = (1.0 - inter) + inter * interlaceAt(sy);
+            if (scanP > 0.0001) {
+                float scanHeight = h * 0.35 * zoom;
+                float center = fract(t * 3.0 * scanP) * h * zoom + (h - h * zoom) * 0.5;
+                float scanStart = center - scanHeight * 0.5;
+                if (y > scanStart && y <= scanStart + scanHeight) {
+                    scan *= scanAt(4.0 * (y - scanStart) / scanHeight);
+                }
             }
 
-            float grillePhase = acScreenNorm.x * 960.0 / detailZoom;
-            vec3 g = grilleMask(grillePhase);
-            float grain = statik * 0.5 * valueNoise(grillePhase * 0.5 + acTime * 23.0 + row * 0.17, 91.0);
-            g = clamp(g + vec3(grain), 0.0, 1.0);
+            float sx = (x - cx) / zoom + cx + jitter;
+            vec2 uv = vec2((clamp(sx, 0.0, w - 1.0) + 0.5) / w,
+                           1.0 - (clamp(sy, 0.0, h - 1.0) + 0.5) / h);
 
-            float aperture = 0.75 * max(apertureGrill, statik);
-            vec3 crt = mix(straight, 2.0 * straight * g + g * 0.25, aperture) * scan;
+            vec4 src = texture2D(inputImg.texture, uv);
+            float a = src.a;
+            vec3 v = src.rgb / max(a, 0.0001) * 255.0;
 
-            float jitter = hash1(floor(acTime * 1000.0) + 131.0) * 0.05 * phosphorescence;
-            vec3 gammaV = vec3(
-                1.0 - 0.60 * phosphorescence + jitter,
-                1.0 - 0.50 * phosphorescence + jitter,
-                1.0 - 0.15 * phosphorescence + jitter
-            );
-            gammaV = clamp(gammaV, vec3(0.05), vec3(2.0));
-            crt = pow(clamp(crt, 0.0, 1.0), gammaV);
+            float phase = x * grilleStep;
+            vec3 g = grilleAt(phase);
+            if (stat > 0.0) {
+                float nx = phase * 0.5 + t * 23.0;
+                g += 127.5 * stat * vec3(smoothNoise(nx, y * 3.0),
+                                         smoothNoise(nx, y * 3.0 + 1.0),
+                                         smoothNoise(nx, y * 3.0 + 2.0));
+            }
 
-            gl_FragColor = vec4(crt * a, a);
+            v = (v * (1.0 - aperture) + aperture * (2.0 * v * g / 256.0 + g * 0.25)) * scan;
+            v = pow(clamp(v / 255.0, 0.0, 1.0), phosGamma);
+
+            gl_FragColor = vec4(v * a, a);
         }
     ]]></shader>
 </effect>
