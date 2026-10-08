@@ -153,7 +153,9 @@ jobs:
           if [ "$FILEPROVIDER_AUTHORITY" != "com.alightcreative.app.motion.fileprovider" ]; then
             PAIRS+=("com.alightcreative.app.motion.fileprovider=$FILEPROVIDER_AUTHORITY")
           fi
-          .github/scripts/rebuild-dex.sh source.apk rebuilt-dex "${PAIRS[@]}" | tee dex.env
+          .github/scripts/rebuild-dex.sh source.apk rebuilt-dex \
+            --hook python3 .github/scripts/inject-custom-editor.py patch -- \
+            "${PAIRS[@]}" | tee dex.env
           cat dex.env >> "$GITHUB_ENV"
 
       - name: Add custom effects

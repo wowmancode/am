@@ -5,17 +5,34 @@
 # than byte-patched: DEX string tables must stay sorted, and changing a
 # string in place can break that order, so Android refuses to load the file.
 #
-# Usage: rebuild-dex.sh <source.apk> <out-dir> OLD=NEW [OLD=NEW ...]
+# Usage: rebuild-dex.sh <source.apk> <out-dir> [--hook SCRIPT ARG...] [--] OLD=NEW [OLD=NEW ...]
 #
 # Each OLD must appear as a complete smali string constant ("OLD") at least
 # once, or the script fails. Only DEX files whose code changed are written
 # to <out-dir>; their names are printed as DEX_NAMES=classes.dex ....
+#
+# --hook SCRIPT ARG...: run SCRIPT <decoded-dir> ARG... after string
+#   replacements and before reassembly. The script can add/modify smali
+#   files, assets, or the manifest. All DEX files are considered changed
+#   when a hook is used.
 
 set -euo pipefail
 
 SOURCE="$1"
 OUT_DIR="$2"
 shift 2
+
+HOOK_CMD=()
+HOOK_USED=false
+if [ "${1:-}" = "--hook" ]; then
+  shift
+  while [ $# -gt 0 ] && [ "$1" != "--" ]; do
+    HOOK_CMD+=("$1")
+    shift
+  done
+  [ "${1:-}" = "--" ] && shift
+  HOOK_USED=true
+fi
 
 APKTOOL_VERSION="2.10.0"
 APKTOOL_SHA256="c0350abbab5314248dfe2ee0c907def4edd14f6faef1f5d372d3d4abd28f0431"
@@ -60,6 +77,16 @@ open(path, "w", encoding="utf-8").write(text.replace(old, new))
 
   echo "Replaced \"$OLD\" in ${#FILES[@]} file(s)" >&2
 done
+
+# Run hook script if provided
+if [ "$HOOK_USED" = true ] && [ "${#HOOK_CMD[@]}" -gt 0 ]; then
+  echo "Running hook: ${HOOK_CMD[*]} $WORK/dec" >&2
+  "${HOOK_CMD[@]}" "$WORK/dec"
+  # When a hook is used, all DEX dirs are considered changed
+  for DIR in "$WORK/dec"/smali*; do
+    basename "$DIR" >> "$CHANGED_DIRS"
+  done
+fi
 
 java -jar "$WORK/apktool.jar" b -o "$WORK/rebuilt.apk" "$WORK/dec" >&2
 

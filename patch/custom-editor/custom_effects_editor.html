@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Custom Effects</title>
+<style>
+:root {
+  --bg: #1a1a2e;
+  --surface: #16213e;
+  --surface2: #0f3460;
+  --accent: #e94560;
+  --accent2: #533483;
+  --text: #eee;
+  --text2: #aaa;
+  --border: #333;
+  --success: #4caf50;
+  --error: #f44336;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Segoe UI',system-ui,sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; overflow:hidden; }
+
+/* Top bar */
+.topbar { display:flex; align-items:center; padding:8px 12px; background:var(--surface); border-bottom:1px solid var(--border); gap:8px; flex-shrink:0; }
+.topbar h1 { font-size:16px; flex:1; font-weight:600; }
+.btn { background:var(--accent); color:#fff; border:none; border-radius:6px; padding:8px 14px; font-size:13px; cursor:pointer; font-weight:500; }
+.btn:active { opacity:0.8; }
+.btn.secondary { background:var(--surface2); }
+.btn.small { padding:5px 10px; font-size:12px; }
+.btn.icon { width:36px; height:36px; padding:0; display:flex; align-items:center; justify-content:center; font-size:18px; border-radius:50%; }
+
+/* Effect list panel */
+.panel-list { display:flex; flex-direction:column; height:100%; }
+.effect-list { flex:1; overflow-y:auto; padding:8px; }
+.effect-item { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px; margin-bottom:8px; cursor:pointer; display:flex; align-items:center; gap:10px; }
+.effect-item:active { background:var(--surface2); }
+.effect-item .name { flex:1; font-size:14px; font-weight:500; }
+.effect-item .date { font-size:11px; color:var(--text2); }
+.effect-item .actions { display:flex; gap:4px; }
+.empty-state { text-align:center; padding:40px 20px; color:var(--text2); }
+.empty-state .icon { font-size:48px; margin-bottom:12px; }
+.empty-state p { font-size:14px; line-height:1.5; }
+
+/* Bottom bar for list */
+.bottombar { display:flex; padding:8px 12px; gap:8px; background:var(--surface); border-top:1px solid var(--border); flex-shrink:0; }
+.bottombar .btn { flex:1; }
+
+/* Editor panel */
+.panel-editor { display:none; flex-direction:column; height:100%; }
+.editor-topbar { display:flex; align-items:center; padding:8px 12px; background:var(--surface); border-bottom:1px solid var(--border); gap:8px; flex-shrink:0; }
+.editor-topbar input { flex:1; background:var(--surface2); border:1px solid var(--border); color:var(--text); padding:8px 12px; border-radius:6px; font-size:14px; outline:none; }
+.editor-topbar input:focus { border-color:var(--accent); }
+
+/* Code area */
+.code-wrap { flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative; }
+.code-area { flex:1; width:100%; background:#0d1117; color:#c9d1d9; font-family:'Fira Code','Cascadia Code','Source Code Pro',monospace; font-size:13px; line-height:1.5; padding:12px; border:none; resize:none; outline:none; tab-size:4; -moz-tab-size:4; overflow:auto; }
+
+/* Status bar */
+.statusbar { display:flex; align-items:center; padding:4px 12px; background:var(--surface); border-top:1px solid var(--border); gap:12px; flex-shrink:0; font-size:11px; color:var(--text2); }
+.statusbar .error { color:var(--error); }
+.statusbar .success { color:var(--success); }
+
+/* Editor bottom bar */
+.editor-bottombar { display:flex; padding:8px 12px; gap:8px; background:var(--surface); border-top:1px solid var(--border); flex-shrink:0; }
+
+/* Preview overlay */
+.preview-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.9); z-index:100; flex-direction:column; }
+.preview-overlay.show { display:flex; }
+.preview-overlay canvas { flex:1; width:100%; object-fit:contain; }
+.preview-bar { display:flex; padding:8px 12px; gap:8px; background:var(--surface); }
+
+/* Modal */
+.modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:200; align-items:center; justify-content:center; padding:20px; }
+.modal-overlay.show { display:flex; }
+.modal { background:var(--surface); border-radius:12px; padding:20px; width:100%; max-width:400px; }
+.modal h2 { font-size:16px; margin-bottom:12px; }
+.modal p { font-size:13px; color:var(--text2); margin-bottom:16px; line-height:1.5; }
+.modal .btn-row { display:flex; gap:8px; justify-content:flex-end; }
+.modal textarea { width:100%; height:200px; background:#0d1117; color:#c9d1d9; border:1px solid var(--border); border-radius:6px; padding:8px; font-family:monospace; font-size:12px; resize:none; margin-bottom:12px; }
+</style>
+</head>
+<body>
+
+<!-- EFFECT LIST VIEW -->
+<div class="panel-list" id="panelList">
+  <div class="topbar">
+    <h1>Custom Effects</h1>
+  </div>
+  <div class="effect-list" id="effectList"></div>
+  <div class="bottombar">
+    <button class="btn" onclick="newEffect()">+ New Effect</button>
+    <button class="btn secondary" onclick="importPack()">Import</button>
+    <button class="btn secondary" onclick="exportPack()">Export</button>
+  </div>
+</div>
+
+<!-- EDITOR VIEW -->
+<div class="panel-editor" id="panelEditor">
+  <div class="editor-topbar">
+    <button class="btn icon secondary" onclick="backToList()" title="Back">&#8592;</button>
+    <input type="text" id="effectName" placeholder="Effect name..." maxlength="64">
+  </div>
+  <div class="code-wrap">
+    <textarea class="code-area" id="codeArea" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"
+      placeholder="// Write your GLSL fragment shader here.
+// Available inputs:
+//   inputImg.texture  - source image sampler
+//   inputImg.size     - source image dimensions
+//   acScreenNorm      - normalized screen coordinates (0-1)
+//   acTime            - animation time in seconds
+//   acScreenSize      - screen size in pixels
+//
+// Your code goes inside main():
+//   vec4 src = texture2D(inputImg.texture, acScreenNorm);
+//   gl_FragColor = src;
+"></textarea>
+  </div>
+  <div class="statusbar" id="statusBar">Ready</div>
+  <div class="editor-bottombar">
+    <button class="btn secondary" onclick="previewEffect()" style="flex:1">Preview</button>
+    <button class="btn" onclick="saveEffect()" style="flex:1">Save &amp; Apply</button>
+  </div>
+</div>
+
+<!-- PREVIEW -->
+<div class="preview-overlay" id="previewOverlay">
+  <canvas id="previewCanvas"></canvas>
+  <div class="preview-bar">
+    <button class="btn secondary" onclick="closePreview()" style="flex:1">Close</button>
+  </div>
+</div>
+
+<!-- IMPORT/EXPORT MODAL -->
+<div class="modal-overlay" id="packModal">
+  <div class="modal">
+    <h2 id="packModalTitle">Import Pack</h2>
+    <p id="packModalDesc">Paste the effect pack code below:</p>
+    <textarea id="packData"></textarea>
+    <div class="btn-row">
+      <button class="btn secondary" onclick="closePackModal()">Cancel</button>
+      <button class="btn" id="packModalAction" onclick="doImport()">Import</button>
+    </div>
+  </div>
+</div>
+
+<!-- DELETE CONFIRM MODAL -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal">
+    <h2>Delete Effect</h2>
+    <p id="deleteMsg">Are you sure?</p>
+    <div class="btn-row">
+      <button class="btn secondary" onclick="closeDeleteModal()">Cancel</button>
+      <button class="btn" onclick="confirmDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+// ---- State ----
+let effects = [];       // [{id, name, code, created, modified}]
+let editingId = null;    // id of effect being edited, or null for new
+let deleteTargetId = null;
+
+// ---- Bridge (Android JS interface) ----
+const Bridge = window.Android || {
+  // Fallback stubs for testing in a browser
+  loadEffects: () => '[]',
+  saveEffect: (id, name, code) => console.log('save', id, name),
+  deleteEffect: (id) => console.log('delete', id),
+  applyEffect: (id) => console.log('apply', id),
+  compileTest: (glsl) => '',  // empty = success, else error message
+  exportPack: (json) => console.log('export', json),
+  importPack: () => null,     // returns JSON string or null
+  getPreviewImage: () => null, // returns base64 PNG or null
+  showToast: (msg) => console.log('toast:', msg),
+};
+
+// ---- Init ----
+function init() {
+  try {
+    const json = Bridge.loadEffects();
+    effects = json ? JSON.parse(json) : [];
+  } catch(e) {
+    effects = [];
+  }
+  renderList();
+}
+
+// ---- List View ----
+function renderList() {
+  const el = document.getElementById('effectList');
+  if (effects.length === 0) {
+    el.innerHTML = '<div class="empty-state"><div class="icon">&#9998;</div><p>No custom effects yet.<br>Tap <b>+ New Effect</b> to create one.</p></div>';
+    return;
+  }
+  el.innerHTML = effects.map(fx => `
+    <div class="effect-item" onclick="editEffect('${fx.id}')">
+      <div class="name">${esc(fx.name)}</div>
+      <div class="actions">
+        <button class="btn small secondary" onclick="event.stopPropagation();applyFromList('${fx.id}')">Apply</button>
+        <button class="btn small secondary" onclick="event.stopPropagation();askDelete('${fx.id}','${esc(fx.name)}')" style="background:var(--error)">&#10005;</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+function esc(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ---- New / Edit ----
+function newEffect() {
+  editingId = null;
+  document.getElementById('effectName').value = '';
+  document.getElementById('codeArea').value =
+`void main() {
+    vec4 src = texture2D(inputImg.texture, acScreenNorm);
+
+    // Your effect code here
+
+    gl_FragColor = src;
+}`;
+  showEditor();
+}
+
+function editEffect(id) {
+  const fx = effects.find(e => e.id === id);
+  if (!fx) return;
+  editingId = id;
+  document.getElementById('effectName').value = fx.name;
+  document.getElementById('codeArea').value = fx.code;
+  showEditor();
+}
+
+function showEditor() {
+  document.getElementById('panelList').style.display = 'none';
+  document.getElementById('panelEditor').style.display = 'flex';
+  document.getElementById('statusBar').textContent = 'Ready';
+  document.getElementById('statusBar').className = 'statusbar';
+}
+
+function backToList() {
+  document.getElementById('panelEditor').style.display = 'none';
+  document.getElementById('panelList').style.display = 'flex';
+  renderList();
+}
+
+// ---- Save ----
+function saveEffect() {
+  const name = document.getElementById('effectName').value.trim();
+  const code = document.getElementById('codeArea').value;
+
+  if (!name) {
+    setStatus('Give your effect a name', 'error');
+    return;
+  }
+  if (!code.trim()) {
+    setStatus('Write some shader code first', 'error');
+    return;
+  }
+
+  // Compile test
+  const err = Bridge.compileTest(code);
+  if (err) {
+    setStatus('Compile error: ' + err, 'error');
+    return;
+  }
+
+  const id = editingId || ('custom_' + Date.now() + '_' + Math.random().toString(36).substr(2,6));
+  const now = Date.now();
+
+  const existing = effects.findIndex(e => e.id === id);
+  if (existing >= 0) {
+    effects[existing].name = name;
+    effects[existing].code = code;
+    effects[existing].modified = now;
+  } else {
+    effects.push({ id, name, code, created: now, modified: now });
+  }
+
+  editingId = id;
+
+  try {
+    Bridge.saveEffect(id, name, code);
+    setStatus('Saved! Effect registered.', 'success');
+    Bridge.showToast(name + ' saved');
+  } catch(e) {
+    setStatus('Save failed: ' + e.message, 'error');
+  }
+}
+
+function applyFromList(id) {
+  try {
+    Bridge.applyEffect(id);
+  } catch(e) {
+    // ignore
+  }
+}
+
+// ---- Delete ----
+function askDelete(id, name) {
+  deleteTargetId = id;
+  document.getElementById('deleteMsg').textContent = 'Delete "' + name + '"? This cannot be undone.';
+  document.getElementById('deleteModal').classList.add('show');
+}
+
+function confirmDelete() {
+  if (deleteTargetId) {
+    effects = effects.filter(e => e.id !== deleteTargetId);
+    try { Bridge.deleteEffect(deleteTargetId); } catch(e) {}
+    deleteTargetId = null;
+  }
+  closeDeleteModal();
+  renderList();
+}
+
+function closeDeleteModal() {
+  document.getElementById('deleteModal').classList.remove('show');
+  deleteTargetId = null;
+}
+
+// ---- Import / Export ----
+function exportPack() {
+  if (effects.length === 0) {
+    Bridge.showToast('No effects to export');
+    return;
+  }
+  const pack = {
+    type: 'alight-custom-effects-pack',
+    version: 1,
+    effects: effects.map(fx => ({ name: fx.name, code: fx.code }))
+  };
+  const json = JSON.stringify(pack, null, 2);
+
+  document.getElementById('packModalTitle').textContent = 'Export Pack';
+  document.getElementById('packModalDesc').textContent = 'Copy this code to share your ' + effects.length + ' effect(s):';
+  document.getElementById('packData').value = json;
+  document.getElementById('packData').readOnly = true;
+  document.getElementById('packModalAction').textContent = 'Copy';
+  document.getElementById('packModalAction').onclick = function() {
+    copyToClipboard(json);
+    Bridge.showToast('Copied to clipboard');
+    closePackModal();
+  };
+  document.getElementById('packModal').classList.add('show');
+
+  // Also tell Android to share it
+  try { Bridge.exportPack(json); } catch(e) {}
+}
+
+function importPack() {
+  document.getElementById('packModalTitle').textContent = 'Import Pack';
+  document.getElementById('packModalDesc').textContent = 'Paste an effect pack code below:';
+  document.getElementById('packData').value = '';
+  document.getElementById('packData').readOnly = false;
+  document.getElementById('packModalAction').textContent = 'Import';
+  document.getElementById('packModalAction').onclick = doImport;
+  document.getElementById('packModal').classList.add('show');
+
+  // Check if Android has clipboard data
+  try {
+    const clip = Bridge.importPack();
+    if (clip) document.getElementById('packData').value = clip;
+  } catch(e) {}
+}
+
+function doImport() {
+  const raw = document.getElementById('packData').value.trim();
+  if (!raw) return;
+
+  let pack;
+  try {
+    pack = JSON.parse(raw);
+  } catch(e) {
+    Bridge.showToast('Invalid pack format');
+    return;
+  }
+
+  if (!pack.effects || !Array.isArray(pack.effects)) {
+    // Try single effect
+    if (pack.name && pack.code) {
+      pack = { effects: [pack] };
+    } else {
+      Bridge.showToast('Invalid pack format');
+      return;
+    }
+  }
+
+  let count = 0;
+  for (const fx of pack.effects) {
+    if (!fx.name || !fx.code) continue;
+    const id = 'custom_' + Date.now() + '_' + Math.random().toString(36).substr(2,6) + '_' + count;
+    const now = Date.now();
+    effects.push({ id, name: fx.name, code: fx.code, created: now, modified: now });
+    try { Bridge.saveEffect(id, fx.name, fx.code); } catch(e) {}
+    count++;
+  }
+
+  closePackModal();
+  renderList();
+  Bridge.showToast('Imported ' + count + ' effect(s)');
+}
+
+function closePackModal() {
+  document.getElementById('packModal').classList.remove('show');
+}
+
+function copyToClipboard(text) {
+  try {
+    if (navigator.clipboard) { navigator.clipboard.writeText(text); return; }
+  } catch(e) {}
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  document.body.appendChild(ta);
+  ta.select();
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+}
+
+// ---- Preview ----
+function previewEffect() {
+  const code = document.getElementById('codeArea').value;
+  const err = Bridge.compileTest(code);
+  if (err) {
+    setStatus('Compile error: ' + err, 'error');
+    return;
+  }
+
+  let imgData;
+  try { imgData = Bridge.getPreviewImage(); } catch(e) {}
+
+  if (!imgData) {
+    // Generate a test pattern
+    const tc = document.createElement('canvas');
+    tc.width = 256; tc.height = 256;
+    const ctx = tc.getContext('2d');
+    const grad = ctx.createLinearGradient(0,0,256,256);
+    grad.addColorStop(0,'#e94560'); grad.addColorStop(0.5,'#533483'); grad.addColorStop(1,'#16213e');
+    ctx.fillStyle = grad; ctx.fillRect(0,0,256,256);
+    ctx.fillStyle = '#fff'; ctx.font = '20px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('Test Pattern', 128, 128);
+    imgData = tc.toDataURL('image/png');
+  }
+
+  renderPreview(code, imgData);
+}
+
+function renderPreview(fragCode, imgSrc) {
+  const overlay = document.getElementById('previewOverlay');
+  const canvas = document.getElementById('previewCanvas');
+  overlay.classList.add('show');
+
+  const img = new Image();
+  img.onload = function() {
+    canvas.width = img.width; canvas.height = img.height;
+    const gl = canvas.getContext('webgl', {preserveDrawingBuffer:true, premultipliedAlpha:false});
+    if (!gl) { setStatus('WebGL not available for preview', 'error'); closePreview(); return; }
+
+    const preamble = `#version 100
+precision highp float;
+uniform vec2 acScreenSize;
+uniform float acTime;
+varying vec2 acScreenNorm;
+varying vec2 acLayerNorm;
+struct AC_ImageInfo { sampler2D texture; vec2 size; };
+uniform AC_ImageInfo inputImg;
+`;
+    const vs = `attribute vec2 p; varying vec2 acScreenNorm; varying vec2 acLayerNorm;
+      void main(){ acScreenNorm=p*0.5+0.5; acLayerNorm=acScreenNorm; gl_Position=vec4(p,0.,1.); }`;
+
+    function sh(t,s){const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);
+      if(!gl.getShaderParameter(o,gl.COMPILE_STATUS)){console.error(gl.getShaderInfoLog(o));return null;} return o;}
+
+    const vs_ = sh(gl.VERTEX_SHADER, vs);
+    const fs_ = sh(gl.FRAGMENT_SHADER, preamble + '\n' + fragCode);
+    if (!vs_ || !fs_) { setStatus('Preview shader compile failed', 'error'); closePreview(); return; }
+
+    const pr = gl.createProgram(); gl.attachShader(pr,vs_); gl.attachShader(pr,fs_); gl.linkProgram(pr);
+    if(!gl.getProgramParameter(pr,gl.LINK_STATUS)){setStatus('Link error','error');closePreview();return;}
+    gl.useProgram(pr);
+
+    const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);
+    gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([-1,-1,1,-1,-1,1,1,1]),gl.STATIC_DRAW);
+    const loc=gl.getAttribLocation(pr,'p');gl.enableVertexAttribArray(loc);gl.vertexAttribPointer(loc,2,gl.FLOAT,false,0,0);
+
+    const t=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,t);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,true);
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,img);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+
+    const u=n=>gl.getUniformLocation(pr,n);
+    gl.uniform1i(u('inputImg.texture'),0);
+    gl.uniform2f(u('inputImg.size'),img.width,img.height);
+    gl.uniform2f(u('acScreenSize'),img.width,img.height);
+    gl.uniform1f(u('acTime'),0.0);
+
+    gl.viewport(0,0,img.width,img.height);
+    gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
+  };
+  img.src = imgSrc;
+}
+
+function closePreview() {
+  document.getElementById('previewOverlay').classList.remove('show');
+}
+
+// ---- Helpers ----
+function setStatus(msg, type) {
+  const sb = document.getElementById('statusBar');
+  sb.textContent = msg;
+  sb.className = 'statusbar' + (type ? ' ' + type : '');
+}
+
+// ---- Tab key in editor ----
+document.getElementById('codeArea').addEventListener('keydown', function(e) {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const s = this.selectionStart, end = this.selectionEnd;
+    this.value = this.value.substring(0, s) + '    ' + this.value.substring(end);
+    this.selectionStart = this.selectionEnd = s + 4;
+  }
+});
+
+// ---- Start ----
+init();
+</script>
+</body>
+</html>
