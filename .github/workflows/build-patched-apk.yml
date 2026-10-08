@@ -103,15 +103,35 @@ jobs:
 
           cat source-info.env >> "$GITHUB_ENV"
 
-      - name: Add custom effects and patch integrity signature
+      # The app hashes all bundled effect XMLs at startup and compares the
+      # result with a constant in its code. Adding effects changes the
+      # hash, so the constant is updated to match the new effect set.
+      - name: Compute effect integrity signature
+        shell: bash
+        run: |
+          set -e
+          python3 .github/scripts/add-effects.py sig source.apk patch/effects | tee sig.env
+          cat sig.env >> "$GITHUB_ENV"
+
+      - name: Rebuild DEX with updated signature
+        shell: bash
+        run: |
+          set -e
+          .github/scripts/rebuild-sig-dex.sh \
+            source.apk "$OLD_EFFECT_SIG" "$NEW_EFFECT_SIG" rebuilt-dex |
+            tee dex.env
+          cat dex.env >> "$GITHUB_ENV"
+
+      - name: Add custom effects
         shell: bash
         run: |
           set -e
 
-          python3 .github/scripts/add-effects.py \
+          python3 .github/scripts/add-effects.py build \
             source.apk \
             custom-unsigned.apk \
-            patch/effects
+            patch/effects \
+            --dex "$DEX_NAME=rebuilt-dex/$DEX_NAME"
 
       - name: Prepare clone signing key
         env:
