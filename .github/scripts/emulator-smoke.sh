@@ -24,6 +24,12 @@ adb shell settings put global animator_duration_scale 0
 
 adb install -r -g "$APK" | tee "$OUT/install.txt"
 
+# A freshly booted emulator is slow enough for the launcher to show
+# "isn't responding" dialogs; let it settle and close them.
+sleep 30
+adb shell am broadcast -a android.intent.action.CLOSE_SYSTEM_DIALOGS >/dev/null
+adb shell input keyevent KEYCODE_HOME
+
 PKG="$(adb shell pm list packages | tr -d '\r' | sed -n 's/^package://p' | grep -m1 '^com\.alightcreative\.motion\.')"
 if [ -z "$PKG" ]; then
   echo "::error::custom package not installed"

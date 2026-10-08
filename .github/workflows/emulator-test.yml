@@ -48,13 +48,14 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
 
-      # x86_64 Google APIs images from Android 11 on translate ARM code,
-      # which this APK needs (it ships arm64-v8a and armeabi-v7a only).
+      # x86_64 images from Android 11 on translate ARM code, which this APK
+      # needs (it ships arm64-v8a and armeabi-v7a only). The Play Store
+      # image is required: the app crashes at launch without Play billing.
       - name: Run on emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 30
-          target: google_apis
+          target: playstore
           arch: x86_64
           profile: pixel_4
           disable-animations: true
