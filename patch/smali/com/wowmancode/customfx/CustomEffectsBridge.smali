@@ -152,11 +152,11 @@
 .end method
 
 
-.method public saveEffect(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
-    .registers 9
+.method public saveEffect(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
+    .registers 10
     .annotation runtime Landroid/webkit/JavascriptInterface;
     .end annotation
-    # p1=id, p2=name, p3=code
+    # p1=id, p2=name, p3=editable code, p4=generated effect XML
 
     :try_start
     # Save the metadata JSON
@@ -174,7 +174,8 @@
     new-instance v2, Ljava/io/File;
     invoke-direct {v2, v0, v1}, Ljava/io/File;-><init>(Ljava/io/File;Ljava/lang/String;)V
 
-    # Build JSON: {"id":"...","name":"...","code":"..."}
+    # Store both the editable source and generated XML. Keeping the XML makes
+    # detected slider parameters survive an app restart.
     new-instance v3, Lorg/json/JSONObject;
     invoke-direct {v3}, Lorg/json/JSONObject;-><init>()V
     const-string v4, "id"
@@ -183,16 +184,15 @@
     invoke-virtual {v3, v4, p2}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
     const-string v4, "code"
     invoke-virtual {v3, v4, p3}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
+    const-string v4, "xml"
+    invoke-virtual {v3, v4, p4}, Lorg/json/JSONObject;->put(Ljava/lang/String;Ljava/lang/Object;)Lorg/json/JSONObject;
 
     invoke-virtual {v3}, Lorg/json/JSONObject;->toString()Ljava/lang/String;
     move-result-object v3
     invoke-static {v2, v3}, Lcom/wowmancode/customfx/CustomEffectsBridge;->writeFile(Ljava/io/File;Ljava/lang/String;)V
 
-    # Build effect XML and register it
-    invoke-direct {p0, p1, p2, p3}, Lcom/wowmancode/customfx/CustomEffectsBridge;->buildEffectXml(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
-    move-result-object v3
-
-    invoke-static {p1, v3}, Lcom/wowmancode/customfx/CustomEffectsLoader;->registerEffect(Ljava/lang/String;Ljava/lang/String;)Z
+    # Register the generated effect, including any detected slider params.
+    invoke-static {p1, p4}, Lcom/wowmancode/customfx/CustomEffectsLoader;->registerEffect(Ljava/lang/String;Ljava/lang/String;)Z
     move-result v0
     :try_end
     .catch Ljava/lang/Exception; {:try_start .. :try_end} :catch_0

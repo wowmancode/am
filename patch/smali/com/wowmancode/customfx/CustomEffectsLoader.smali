@@ -72,10 +72,21 @@
     invoke-virtual {v6, v5}, Lorg/json/JSONObject;->getString(Ljava/lang/String;)Ljava/lang/String;
     move-result-object v5
 
-    # Build effect XML
+    # New saves persist the generated XML so their slider definitions survive
+    # restart. Fall back to the old no-parameter builder for existing saves.
+    const-string v1, "xml"
+    const/4 v9, 0x0
+    invoke-virtual {v6, v1, v9}, Lorg/json/JSONObject;->optString(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
+    move-result-object v1
+    if-eqz v1, :legacy_xml
+    move-object v5, v1
+    goto :parse_xml
+
+    :legacy_xml
     invoke-static {v7, v8, v5}, Lcom/wowmancode/customfx/CustomEffectsLoader;->buildEffectXml(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
     move-result-object v5
 
+    :parse_xml
     # Parse it into a VisualEffect. The parser requires a non-null base URI.
     invoke-static {v5}, Lcom/wowmancode/customfx/CustomEffectsLoader;->parseEffect(Ljava/lang/String;)Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffect;
     move-result-object v5

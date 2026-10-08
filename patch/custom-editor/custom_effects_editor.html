@@ -110,6 +110,10 @@ body { font-family: 'Segoe UI',system-ui,sans-serif; background:var(--bg); color
 //   acTime            - animation time in seconds
 //   acScreenSize      - screen size in pixels
 //
+// Add a native slider to any float with:
+//   float strength = 0.5; // @slider 0.0 1.0 0.01
+// The values after @slider are: minimum, maximum, step.
+//
 // Your code goes inside main():
 //   vec4 src = texture2D(inputImg.texture, acScreenNorm);
 //   gl_FragColor = src;
@@ -167,7 +171,7 @@ let deleteTargetId = null;
 const Bridge = window.Android || {
   // Fallback stubs for testing in a browser
   loadEffects: () => '[]',
-  saveEffect: (id, name, code) => { console.log('save', id, name); return true; },
+  saveEffect: (id, name, code, xml) => { console.log('save', id, name, xml); return true; },
   deleteEffect: (id) => console.log('delete', id),
   applyEffect: (id) => console.log('apply', id),
   exportPack: (json) => console.log('export', json),
@@ -207,13 +211,111 @@ struct AC_ImageInfo { sampler2D texture; vec2 size; };
 uniform AC_ImageInfo inputImg;
 `;
 let compileGl = null;
+
+const NUMBER_SOURCE = '[+-]?(?:\\d+(?:\\.\\d*)?|\\.\\d+)(?:[eE][+-]?\\d+)?';
+const SLIDER_DECLARATION = new RegExp(
+  '^\\s*(?:const\\s+)?float\\s+([A-Za-z_]\\w*)\\s*=\\s*(' + NUMBER_SOURCE +
+  ')\\s*;\\s*//\\s*@slider\\s+(' + NUMBER_SOURCE + ')\\s+(' + NUMBER_SOURCE +
+  ')(?:\\s+(' + NUMBER_SOURCE + '))?(?:\\s+(.+?))?\\s*$'
+);
+const SLIDER_DIRECTIVE = new RegExp(
+  '^\\s*//\\s*@slider\\s+([A-Za-z_]\\w*)\\s+(' + NUMBER_SOURCE + ')\\s+(' +
+  NUMBER_SOURCE + ')\\s+(' + NUMBER_SOURCE + ')(?:\\s+(' + NUMBER_SOURCE +
+  '))?(?:\\s+(.+?))?\\s*$'
+);
+const RESERVED_PARAMS = new Set([
+  'inputImg', 'acScreenSize', 'acPreviewSize', 'acLayerScale', 'acLayerCenter',
+  'acLayerCenterNorm', 'acLayerPivot', 'acLayerSize', 'acLayerSizeNorm',
+  'acVelocity', 'acAngularVelocity', 'acScaleVelocity', 'acTime', 'acStartTime',
+  'acEndTime', 'acPass', 'acIter', 'acLayerTransform', 'acScreenToLayer',
+  'acLayerToScreen', 'acShowGuides', 'acScreenNorm', 'acLayerNorm'
+]);
+
+function sliderLabel(id) {
+  return id.replace(/_/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, c => c.toUpperCase());
+}
+
+// Detect explicitly adjustable values while leaving a blank source line in
+// their place. The app generates a float uniform for each resulting spinner.
+function analyzeShader(code) {
+  const sliders = [];
+  const ids = new Set();
+  let error = '';
+  const lines = code.split(/\r?\n/);
+  const shaderLines = lines.map((line, index) => {
+    let m = line.match(SLIDER_DECLARATION);
+    let id, def, min, max, step, label;
+    if (m) {
+      [, id, def, min, max, step, label] = m;
+    } else {
+      m = line.match(SLIDER_DIRECTIVE);
+      if (!m) return line;
+      [, id, def, min, max, step, label] = m;
+    }
+
+    const values = [def, min, max].map(Number);
+    const stepValue = step === undefined ? (values[2] - values[1]) / 100 : Number(step);
+    if (RESERVED_PARAMS.has(id)) {
+      error = 'Line ' + (index + 1) + ': "' + id + '" is reserved by the app';
+    } else if (ids.has(id)) {
+      error = 'Line ' + (index + 1) + ': duplicate slider "' + id + '"';
+    } else if (!values.every(Number.isFinite) || !Number.isFinite(stepValue) ||
+               values[1] >= values[2] || values[0] < values[1] || values[0] > values[2] ||
+               stepValue <= 0) {
+      error = 'Line ' + (index + 1) + ': invalid slider range or default';
+    } else {
+      ids.add(id);
+      sliders.push({
+        id, default: def, min, max,
+        step: step === undefined ? String(stepValue) : step,
+        value: values[0], label: (label || sliderLabel(id)).trim()
+      });
+    }
+    return ''; // Preserve line numbers for shader compiler errors.
+  });
+  return { code: shaderLines.join('\n'), sliders, error };
+}
+
+function xmlEscape(value) {
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function buildEffectXml(id, name, analyzed) {
+  const strings = analyzed.sliders.map((p, i) =>
+    `            <string name="slider_${i}">${xmlEscape(p.label)}</string>`).join('\n');
+  const params = analyzed.sliders.map((p, i) =>
+    `        <spinner id="${xmlEscape(p.id)}" default="${xmlEscape(p.default)}" min="${xmlEscape(p.min)}" max="${xmlEscape(p.max)}" step="${xmlEscape(p.step)}" label="@string/slider_${i}"${Number(p.min) === 0 && Number(p.max) === 1 ? ' type="percent"' : ''} />`).join('\n');
+  const safeShader = analyzed.code.replace(/]]>/g, ']]]]><![CDATA[>');
+  return `<?xml version='1.0' encoding='UTF-8' ?>
+<effect id="${xmlEscape(id)}" name="@string/name" desc="@string/desc" category="color" tags="custom,color">
+    <strings>
+        <locale lang="en">
+            <string name="name">${xmlEscape(name)}</string>
+            <string name="desc">Custom shader effect with ${analyzed.sliders.length} adjustable value(s).</string>
+${strings}${strings ? '\n' : ''}        </locale>
+    </strings>
+    <params>
+        <texture id="inputImg" srcType="content" />
+${params}${params ? '\n' : ''}    </params>
+    <shader type="fragment" precision="high"><![CDATA[
+${safeShader}
+    ]]></shader>
+</effect>
+`;
+}
+
 function compileTest(code) {
   try {
+    const analyzed = analyzeShader(code);
+    if (analyzed.error) return analyzed.error;
     if (!compileGl) compileGl = document.createElement('canvas').getContext('webgl');
     const gl = compileGl;
     if (!gl) return '';  // no WebGL: can't check here, let the app try
     const s = gl.createShader(gl.FRAGMENT_SHADER);
-    gl.shaderSource(s, APP_PREAMBLE + '\n' + code);
+    const uniforms = analyzed.sliders.map(p => 'uniform float ' + p.id + ';').join('\n');
+    gl.shaderSource(s, APP_PREAMBLE + '\n' + uniforms + '\n' + analyzed.code);
     gl.compileShader(s);
     const ok = gl.getShaderParameter(s, gl.COMPILE_STATUS);
     const log = gl.getShaderInfoLog(s) || 'Compile failed';
@@ -265,9 +367,9 @@ function newEffect() {
 `void main() {
     vec4 src = texture2D(inputImg.texture, acScreenNorm);
 
-    // Your effect code here
+    float strength = 0.5; // @slider 0.0 1.0 0.01
 
-    gl_FragColor = src;
+    gl_FragColor = mix(src, vec4(vec3(src.a) - src.rgb, src.a), strength);
 }`;
   showEditor();
 }
@@ -286,6 +388,7 @@ function showEditor() {
   document.getElementById('panelEditor').style.display = 'flex';
   document.getElementById('statusBar').textContent = 'Ready';
   document.getElementById('statusBar').className = 'statusbar';
+  updateDetectedSliders();
 }
 
 function backToList() {
@@ -330,7 +433,12 @@ function saveEffect() {
   editingId = id;
 
   try {
-    const registered = Bridge.saveEffect(id, name, code);
+    const analyzed = analyzeShader(code);
+    if (analyzed.error) {
+      setStatus(analyzed.error, 'error');
+      return;
+    }
+    const registered = Bridge.saveEffect(id, name, code, buildEffectXml(id, name, analyzed));
     if (registered === false) {
       setStatus('Save failed: the app could not register this effect', 'error');
       Bridge.showToast('Could not register ' + name);
@@ -444,9 +552,13 @@ function doImport() {
   for (const fx of pack.effects) {
     if (!fx.name || !fx.code) continue;
     const id = 'custom_' + Date.now() + '_' + Math.random().toString(36).substr(2,6) + '_' + count;
+    try {
+      const analyzed = analyzeShader(fx.code);
+      if (analyzed.error) continue;
+      if (Bridge.saveEffect(id, fx.name, fx.code, buildEffectXml(id, fx.name, analyzed)) === false) continue;
+    } catch(e) { continue; }
     const now = Date.now();
     effects.push({ id, name: fx.name, code: fx.code, created: now, modified: now });
-    try { Bridge.saveEffect(id, fx.name, fx.code); } catch(e) {}
     count++;
   }
 
@@ -510,6 +622,9 @@ function renderPreview(fragCode, imgSrc) {
     const gl = canvas.getContext('webgl', {preserveDrawingBuffer:true, premultipliedAlpha:false});
     if (!gl) { setStatus('WebGL not available for preview', 'error'); closePreview(); return; }
 
+    const analyzed = analyzeShader(fragCode);
+    if (analyzed.error) { setStatus(analyzed.error, 'error'); closePreview(); return; }
+    const sliderUniforms = analyzed.sliders.map(p => 'uniform float ' + p.id + ';').join('\n');
     const preamble = `#version 100
 precision highp float;
 uniform vec2 acScreenSize;
@@ -518,6 +633,7 @@ varying vec2 acScreenNorm;
 varying vec2 acLayerNorm;
 struct AC_ImageInfo { sampler2D texture; vec2 size; };
 uniform AC_ImageInfo inputImg;
+${sliderUniforms}
 `;
     const vs = `attribute vec2 p; varying vec2 acScreenNorm; varying vec2 acLayerNorm;
       void main(){ acScreenNorm=p*0.5+0.5; acLayerNorm=acScreenNorm; gl_Position=vec4(p,0.,1.); }`;
@@ -526,7 +642,7 @@ uniform AC_ImageInfo inputImg;
       if(!gl.getShaderParameter(o,gl.COMPILE_STATUS)){console.error(gl.getShaderInfoLog(o));return null;} return o;}
 
     const vs_ = sh(gl.VERTEX_SHADER, vs);
-    const fs_ = sh(gl.FRAGMENT_SHADER, preamble + '\n' + fragCode);
+    const fs_ = sh(gl.FRAGMENT_SHADER, preamble + '\n' + analyzed.code);
     if (!vs_ || !fs_) { setStatus('Preview shader compile failed', 'error'); closePreview(); return; }
 
     const pr = gl.createProgram(); gl.attachShader(pr,vs_); gl.attachShader(pr,fs_); gl.linkProgram(pr);
@@ -550,6 +666,7 @@ uniform AC_ImageInfo inputImg;
     gl.uniform2f(u('inputImg.size'),img.width,img.height);
     gl.uniform2f(u('acScreenSize'),img.width,img.height);
     gl.uniform1f(u('acTime'),0.0);
+    analyzed.sliders.forEach(p => gl.uniform1f(u(p.id), p.value));
 
     gl.viewport(0,0,img.width,img.height);
     gl.drawArrays(gl.TRIANGLE_STRIP,0,4);
@@ -568,6 +685,15 @@ function setStatus(msg, type) {
   sb.className = 'statusbar' + (type ? ' ' + type : '');
 }
 
+function updateDetectedSliders() {
+  const analyzed = analyzeShader(document.getElementById('codeArea').value);
+  if (analyzed.error) {
+    setStatus(analyzed.error, 'error');
+  } else {
+    setStatus(analyzed.sliders.length + ' slider' + (analyzed.sliders.length === 1 ? '' : 's') + ' detected', '');
+  }
+}
+
 // ---- Tab key in editor ----
 document.getElementById('codeArea').addEventListener('keydown', function(e) {
   if (e.key === 'Tab') {
@@ -577,6 +703,7 @@ document.getElementById('codeArea').addEventListener('keydown', function(e) {
     this.selectionStart = this.selectionEnd = s + 4;
   }
 });
+document.getElementById('codeArea').addEventListener('input', updateDetectedSliders);
 
 // ---- Start ----
 init();
