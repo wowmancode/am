@@ -1,37 +1,33 @@
 name: Build Custom Alight Motion APK
 
-# Downloads the STOCK Alight Motion APK from a release, applies the anxyis
-# Morphe patch bundle, adds the custom effects from patch/effects/, then
-# aligns and signs with the persistent key, then publishes to
-# "<release>-custom".
+# Takes the Morphe-patched Alight Motion APK from a private release (am-2 by
+# default), adds the custom effects from patch/effects/, then aligns and signs
+# it with the persistent clone key, then publishes it to the "<release>-custom"
+# release (e.g. am-2-custom).
 #
-# The anxyis patches do NOT rename the package: output stays
-# com.alightcreative.motion, so the built APK replaces the official app.
+# The Morphe-patched APK is already a side-by-side clone (its package is
+# com.alightcreative.motion.morphe), so nothing is renamed here.
 
 on:
   workflow_dispatch:
     inputs:
       source_release:
-        description: "Release tag holding the stock Alight_Motion-*.apk"
+        description: "Release tag that holds the Morphe-patched Alight_Motion-*.apk"
         required: false
-        default: "am"
+        default: "am-2"
   push:
     branches:
       - main
     paths:
       - "patch/effects/**"
-      - "runner/**"
       - ".github/workflows/build-patched-apk.yml"
 
 permissions:
   contents: write
-  packages: read
 
 env:
-  SOURCE_RELEASE: ${{ inputs.source_release || 'am' }}
+  SOURCE_RELEASE: ${{ inputs.source_release || 'am-2' }}
   ORIGINAL_PACKAGE: com.alightcreative.motion
-  ANXYIS_REPO: anxyis/anxy-patches
-  ANXYIS_REF: main
 
 jobs:
   build:
@@ -63,10 +59,10 @@ jobs:
             exit 1
           fi
 
-          mv source/*.apk stock.apk
+          mv source/*.apk source.apk
           rmdir source
 
-          ls -lh stock.apk
+          ls -lh source.apk
 
       - name: Locate Android build tools and read source metadata
         shell: bash
@@ -96,71 +92,15 @@ jobs:
           # shellcheck disable=SC1091
           . ./source-info.env
 
-          cat source-info.env >> "$GITHUB_ENV"
-
-      - name: Set up JDK 17 for Gradle
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: 8.10.2
-
-      - name: Clone anxyis/anxy-patches
-        run: |
-          set -e
-          git clone --depth 1 --branch "$ANXYIS_REF" \
-            "https://github.com/$ANXYIS_REPO.git" \
-            anxyis-patches
-
-      - name: Build anxyis .mpp bundle
-        env:
-          GITHUB_TOKEN: ${{ secrets.MORPHE_PACKAGES_TOKEN || github.token }}
-          GITHUB_ACTOR: ${{ github.actor }}
-        working-directory: anxyis-patches
-        run: |
-          set -e
-          ./gradlew --no-daemon :patches:buildPatchBundle
-
-          MPP="$(find patches/build/libs -maxdepth 1 -name 'patches-*.mpp' | head -n 1)"
-          [ -n "$MPP" ] || {
-            echo "::error::no .mpp produced" >&2
-            ls -l patches/build/libs >&2
-            exit 1
-          }
-
-          cp "$MPP" "$GITHUB_WORKSPACE/patches.mpp"
-          echo "Bundle: $MPP"
-
-      - name: Build runner
-        env:
-          GITHUB_TOKEN: ${{ secrets.MORPHE_PACKAGES_TOKEN || github.token }}
-          GITHUB_ACTOR: ${{ github.actor }}
-        run: gradle --no-daemon :runner:installDist
-
-      - name: Apply patches to stock.apk
-        run: |
-          set -e
-
-          ./runner/build/install/runner/bin/runner \
-            --patches patches.mpp \
-            --input stock.apk \
-            --output source.apk \
-            --cache .morphe-cache
-
-          ls -lh source.apk
-          "$BUILD_TOOLS/aapt2" dump badging source.apk | head -3
-
-          # anxyis patches do NOT rename the package, so the patched APK must
-          # still carry the original package name.
-          PATCHED_PKG="$("$BUILD_TOOLS/aapt2" dump badging source.apk | sed -n "s/^package: name='\([^']*\)'.*/\1/p" | head -1)"
-          if [ "$PATCHED_PKG" != "$ORIGINAL_PACKAGE" ]; then
-            echo "::error::patched package $PATCHED_PKG != $ORIGINAL_PACKAGE" >&2
+          # The whole point of the clone is to install next to the official
+          # app. If the release holds an unpatched APK, stop here instead of
+          # shipping something that would replace or conflict with it.
+          if [ "$SOURCE_PACKAGE" = "$ORIGINAL_PACKAGE" ]; then
+            echo "::error::source.apk still uses the original package $ORIGINAL_PACKAGE; expected a Morphe-patched clone"
             exit 1
           fi
+
+          cat source-info.env >> "$GITHUB_ENV"
 
       - name: Add custom effects
         shell: bash
@@ -384,8 +324,13 @@ jobs:
           echo "Package: $PACKAGE"
           echo "versionCode: $VERSION_CODE"
 
-          if [ "$PACKAGE" != "$ORIGINAL_PACKAGE" ]; then
-            echo "ERROR: package changed from $ORIGINAL_PACKAGE to $PACKAGE" >&2
+          if [ "$PACKAGE" != "$SOURCE_PACKAGE" ]; then
+            echo "ERROR: package changed from $SOURCE_PACKAGE to $PACKAGE" >&2
+            exit 1
+          fi
+
+          if [ "$PACKAGE" = "$ORIGINAL_PACKAGE" ]; then
+            echo "ERROR: output uses the original package $ORIGINAL_PACKAGE" >&2
             exit 1
           fi
 
