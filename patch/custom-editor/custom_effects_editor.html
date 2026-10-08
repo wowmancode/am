@@ -170,12 +170,59 @@ const Bridge = window.Android || {
   saveEffect: (id, name, code) => console.log('save', id, name),
   deleteEffect: (id) => console.log('delete', id),
   applyEffect: (id) => console.log('apply', id),
-  compileTest: (glsl) => '',  // empty = success, else error message
   exportPack: (json) => console.log('export', json),
   importPack: () => null,     // returns JSON string or null
   getPreviewImage: () => null, // returns base64 PNG or null
   showToast: (msg) => console.log('toast:', msg),
 };
+
+// Compile the shader the way the app assembles it (same preamble) using
+// WebGL, which uses the same GLSL ES 1.00 language. Returns '' on success,
+// otherwise the compiler's error log.
+const APP_PREAMBLE = `#version 100
+precision highp float;
+uniform vec2 acScreenSize;
+uniform vec2 acPreviewSize;
+uniform vec2 acLayerScale;
+uniform vec2 acLayerCenter;
+uniform vec2 acLayerCenterNorm;
+uniform vec2 acLayerPivot;
+uniform vec2 acLayerSize;
+uniform vec2 acLayerSizeNorm;
+uniform vec2 acVelocity;
+uniform float acAngularVelocity;
+uniform float acScaleVelocity;
+uniform float acTime;
+uniform float acStartTime;
+uniform float acEndTime;
+uniform int acPass;
+uniform int acIter;
+uniform mat3 acLayerTransform;
+uniform mat4 acScreenToLayer;
+uniform mat4 acLayerToScreen;
+uniform bool acShowGuides;
+varying vec2 acScreenNorm;
+varying vec2 acLayerNorm;
+struct AC_ImageInfo { sampler2D texture; vec2 size; };
+uniform AC_ImageInfo inputImg;
+`;
+let compileGl = null;
+function compileTest(code) {
+  try {
+    if (!compileGl) compileGl = document.createElement('canvas').getContext('webgl');
+    const gl = compileGl;
+    if (!gl) return '';  // no WebGL: can't check here, let the app try
+    const s = gl.createShader(gl.FRAGMENT_SHADER);
+    gl.shaderSource(s, APP_PREAMBLE + '\n' + code);
+    gl.compileShader(s);
+    const ok = gl.getShaderParameter(s, gl.COMPILE_STATUS);
+    const log = gl.getShaderInfoLog(s) || 'Compile failed';
+    gl.deleteShader(s);
+    return ok ? '' : log;
+  } catch (e) {
+    return '';
+  }
+}
 
 // ---- Init ----
 function init() {
@@ -262,7 +309,7 @@ function saveEffect() {
   }
 
   // Compile test
-  const err = Bridge.compileTest(code);
+  const err = compileTest(code);
   if (err) {
     setStatus('Compile error: ' + err, 'error');
     return;
@@ -422,7 +469,7 @@ function copyToClipboard(text) {
 // ---- Preview ----
 function previewEffect() {
   const code = document.getElementById('codeArea').value;
-  const err = Bridge.compileTest(code);
+  const err = compileTest(code);
   if (err) {
     setStatus('Compile error: ' + err, 'error');
     return;

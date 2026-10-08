@@ -11,13 +11,17 @@
 .end method
 
 
-# Called from the patched VisualEffectKt$initVisualEffects$1 during startup.
-# Reads all saved custom effects from internal storage and registers them.
-.method public static loadAll(Landroid/content/Context;Ljava/util/Map;)V
-    .registers 10
-    # p0 = Context, p1 = loadedVisualEffects map
+# Called from the patched VisualEffectKt$initVisualEffects$1 during startup,
+# just before the "effects loaded" latch opens. Reads all saved custom
+# effects from internal storage and registers them.
+.method public static loadAll(Landroid/content/Context;)V
+    .registers 12
+    # p0 = Context; v10 = loadedVisualEffects map
 
     :try_start
+    invoke-static {}, Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffectKt;->access$getLoadedVisualEffects$p()Ljava/util/Map;
+    move-result-object v10
+
     invoke-virtual {p0}, Landroid/content/Context;->getFilesDir()Ljava/io/File;
     move-result-object v0
     new-instance v1, Ljava/io/File;
@@ -78,7 +82,7 @@
     move-result-object v5
 
     # Put it in the map
-    invoke-interface {p1, v7, v5}, Ljava/util/Map;->put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
+    invoke-interface {v10, v7, v5}, Ljava/util/Map;->put(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object;
 
     const-string v6, "CustomFX"
     new-instance v8, Ljava/lang/StringBuilder;
@@ -203,7 +207,7 @@
 
 
 .method private static xmlEscape(Ljava/lang/String;)Ljava/lang/String;
-    .registers 2
+    .registers 3
     const-string v0, "&"
     const-string v1, "&amp;"
     invoke-virtual {p0, v0, v1}, Ljava/lang/String;->replace(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;

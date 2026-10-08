@@ -5,18 +5,22 @@
 
 # instance fields
 .field private ctx:Landroid/content/Context;
+.field private act:Landroid/app/Activity;
+.field private dlg:Landroid/app/Dialog;
 
 
 # direct methods
-.method public constructor <init>(Landroid/content/Context;)V
-    .registers 2
+.method public constructor <init>(Landroid/app/Activity;Landroid/app/Dialog;)V
+    .registers 3
     invoke-direct {p0}, Ljava/lang/Object;-><init>()V
     iput-object p1, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->ctx:Landroid/content/Context;
+    iput-object p1, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->act:Landroid/app/Activity;
+    iput-object p2, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->dlg:Landroid/app/Dialog;
     return-void
 .end method
 
 .method private getStorageDir()Ljava/io/File;
-    .registers 3
+    .registers 4
     iget-object v0, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->ctx:Landroid/content/Context;
     invoke-virtual {v0}, Landroid/content/Context;->getFilesDir()Ljava/io/File;
     move-result-object v0
@@ -28,7 +32,7 @@
 .end method
 
 .method private buildEffectXml(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
-    .registers 5
+    .registers 6
     # p1=id, p2=name, p3=glsl code
     # Build a complete effect XML string
 
@@ -58,7 +62,7 @@
 .end method
 
 .method private static xmlEscape(Ljava/lang/String;)Ljava/lang/String;
-    .registers 2
+    .registers 3
     const-string v0, "&"
     const-string v1, "&amp;"
     invoke-virtual {p0, v0, v1}, Ljava/lang/String;->replace(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String;
@@ -82,7 +86,7 @@
 # ---- JavaScript Interface Methods ----
 
 .method public loadEffects()Ljava/lang/String;
-    .registers 8
+    .registers 9
     .annotation runtime Landroid/webkit/JavascriptInterface;
     .end annotation
 
@@ -102,7 +106,8 @@
 
     const/4 v3, 0x0
     array-length v4, v2
-    const/4 v5, 0x0  # first flag
+    # v5: whether an entry has been written (for commas)
+    const/4 v5, 0x0
 
     :loop_start
     if-ge v3, v4, :cond_done
@@ -229,99 +234,18 @@
 
 
 .method public applyEffect(Ljava/lang/String;)V
-    .registers 6
+    .registers 5
     .annotation runtime Landroid/webkit/JavascriptInterface;
     .end annotation
 
-    # Set result and finish the activity so the browser picks it up
-    iget-object v0, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->ctx:Landroid/content/Context;
-    check-cast v0, Landroid/app/Activity;
-
-    new-instance v1, Landroid/content/Intent;
-    invoke-direct {v1}, Landroid/content/Intent;-><init>()V
-    const-string v2, "addEffectId"
-
-    # Build the id string with trailing /
-    new-instance v3, Ljava/lang/StringBuilder;
-    invoke-direct {v3}, Ljava/lang/StringBuilder;-><init>()V
-    invoke-virtual {v3, p1}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
-    const-string v4, "/"
-    invoke-virtual {v3, v4}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
-    invoke-virtual {v3}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
-    move-result-object v3
-
-    invoke-virtual {v1, v2, v3}, Landroid/content/Intent;->putExtra(Ljava/lang/String;Ljava/lang/String;)Landroid/content/Intent;
-
-    const/4 v2, -0x1  # RESULT_OK
-    invoke-virtual {v0, v2, v1}, Landroid/app/Activity;->setResult(ILandroid/content/Intent;)V
-    invoke-virtual {v0}, Landroid/app/Activity;->finish()V
-
+    const/4 v0, 0x2
+    iget-object v1, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->act:Landroid/app/Activity;
+    iget-object v2, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->dlg:Landroid/app/Dialog;
+    invoke-static {v0, v1, v2, p1}, Lcom/wowmancode/customfx/CustomEffectsUi;->post(ILandroid/app/Activity;Landroid/app/Dialog;Ljava/lang/String;)V
     return-void
 .end method
 
 
-.method public compileTest(Ljava/lang/String;)Ljava/lang/String;
-    .registers 6
-    .annotation runtime Landroid/webkit/JavascriptInterface;
-    .end annotation
-    # p1 = GLSL code to test
-    # Returns empty string on success, error message on failure
-
-    :try_start
-    # Try to compile using GLES20
-    # Get an EGL context if we don't have one
-    const/16 v0, 0x8b30  # GL_FRAGMENT_SHADER
-
-    invoke-static {v0}, Landroid/opengl/GLES20;->glCreateShader(I)I
-    move-result v1
-
-    # Build full shader source with preamble
-    new-instance v2, Ljava/lang/StringBuilder;
-    invoke-direct {v2}, Ljava/lang/StringBuilder;-><init>()V
-    const-string v3, "#version 100\nprecision highp float;\nuniform vec2 acScreenSize;\nuniform vec2 acPreviewSize;\nuniform vec2 acLayerScale;\nuniform vec2 acLayerCenter;\nuniform vec2 acLayerCenterNorm;\nuniform vec2 acLayerPivot;\nuniform vec2 acLayerSize;\nuniform vec2 acLayerSizeNorm;\nuniform vec2 acVelocity;\nuniform float acAngularVelocity;\nuniform float acScaleVelocity;\nuniform float acTime;\nuniform float acStartTime;\nuniform float acEndTime;\nuniform int acPass;\nuniform int acIter;\nuniform mat3 acLayerTransform;\nuniform mat4 acScreenToLayer;\nuniform mat4 acLayerToScreen;\nuniform bool acShowGuides;\nvarying vec2 acScreenNorm;\nvarying vec2 acLayerNorm;\nstruct AC_ImageInfo { sampler2D texture; vec2 size; };\nuniform AC_ImageInfo inputImg;\n"
-    invoke-virtual {v2, v3}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
-    invoke-virtual {v2, p1}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
-    invoke-virtual {v2}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
-    move-result-object v2
-
-    invoke-static {v1, v2}, Landroid/opengl/GLES20;->glShaderSource(ILjava/lang/String;)V
-    invoke-static {v1}, Landroid/opengl/GLES20;->glCompileShader(I)V
-
-    # Check status
-    const/4 v2, 0x1
-    new-array v3, v2, [I
-    const/16 v4, 0x8b81  # GL_COMPILE_STATUS
-    const/4 v2, 0x0
-    invoke-static {v1, v4, v3, v2}, Landroid/opengl/GLES20;->glGetShaderiv(II[II)V
-
-    aget v4, v3, v2
-
-    if-nez v4, :cond_success
-
-    # Get error log
-    invoke-static {v1}, Landroid/opengl/GLES20;->glGetShaderInfoLog(I)Ljava/lang/String;
-    move-result-object v2
-
-    invoke-static {v1}, Landroid/opengl/GLES20;->glDeleteShader(I)V
-
-    return-object v2
-
-    :cond_success
-    invoke-static {v1}, Landroid/opengl/GLES20;->glDeleteShader(I)V
-    const-string v0, ""
-    return-object v0
-    :try_end
-    .catch Ljava/lang/Exception; {:try_start .. :try_end} :catch_0
-
-    :catch_0
-    move-exception v0
-    invoke-virtual {v0}, Ljava/lang/Exception;->getMessage()Ljava/lang/String;
-    move-result-object v0
-    if-nez v0, :ret_err
-    const-string v0, "Unknown compile error"
-    :ret_err
-    return-object v0
-.end method
 
 
 .method public exportPack(Ljava/lang/String;)V
@@ -422,27 +346,28 @@
 
 
 .method public showToast(Ljava/lang/String;)V
-    .registers 4
+    .registers 5
     .annotation runtime Landroid/webkit/JavascriptInterface;
     .end annotation
 
-    iget-object v0, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->ctx:Landroid/content/Context;
-    const/4 v1, 0x0
-    invoke-static {v0, p1, v1}, Landroid/widget/Toast;->makeText(Landroid/content/Context;Ljava/lang/CharSequence;I)Landroid/widget/Toast;
-    move-result-object v0
-    invoke-virtual {v0}, Landroid/widget/Toast;->show()V
+    const/4 v0, 0x0
+    iget-object v1, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->act:Landroid/app/Activity;
+    const/4 v2, 0x0
+    invoke-static {v0, v1, v2, p1}, Lcom/wowmancode/customfx/CustomEffectsUi;->post(ILandroid/app/Activity;Landroid/app/Dialog;Ljava/lang/String;)V
     return-void
 .end method
 
 
-.method public finishActivity()V
-    .registers 2
+.method public close()V
+    .registers 5
     .annotation runtime Landroid/webkit/JavascriptInterface;
     .end annotation
 
-    iget-object v0, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->ctx:Landroid/content/Context;
-    check-cast v0, Landroid/app/Activity;
-    invoke-virtual {v0}, Landroid/app/Activity;->finish()V
+    const/4 v0, 0x1
+    iget-object v1, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->act:Landroid/app/Activity;
+    iget-object v2, p0, Lcom/wowmancode/customfx/CustomEffectsBridge;->dlg:Landroid/app/Dialog;
+    const/4 v3, 0x0
+    invoke-static {v0, v1, v2, v3}, Lcom/wowmancode/customfx/CustomEffectsUi;->post(ILandroid/app/Activity;Landroid/app/Dialog;Ljava/lang/String;)V
     return-void
 .end method
 

@@ -131,6 +131,14 @@ def cmd_build(args: argparse.Namespace) -> None:
         dex_replacements[name] = Path(path).read_bytes()
         check_dex(name, dex_replacements[name])
 
+    # Extra files to add, e.g. the Custom Effects editor page. They live
+    # outside assets/effects/, so they don't affect the effect signature.
+    for spec in args.asset or []:
+        name, _, path = spec.partition("=")
+        if not name.startswith("assets/") or name.startswith(EFFECTS_PREFIX) or not path:
+            raise SystemExit(f"ERROR: bad --asset value {spec!r}")
+        custom[name] = Path(path).read_bytes()
+
     kept = replaced_effects = dropped = 0
     seen_dex: set[str] = set()
 
@@ -222,6 +230,8 @@ def main() -> None:
     p_build.add_argument("effects_dir")
     p_build.add_argument("--dex", action="append",
                          help="NAME=PATH: replace dex entry NAME with the file at PATH")
+    p_build.add_argument("--asset", action="append",
+                         help="NAME=PATH: add (or replace) entry NAME, under assets/, with PATH")
     p_build.set_defaults(func=cmd_build)
 
     args = parser.parse_args()

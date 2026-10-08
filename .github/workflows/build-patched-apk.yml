@@ -20,6 +20,8 @@ on:
       - main
     paths:
       - "patch/effects/**"
+      - "patch/custom-editor/**"
+      - "patch/smali/**"
       - ".github/scripts/**"
       - ".github/workflows/build-patched-apk.yml"
 
@@ -172,7 +174,8 @@ jobs:
             source.apk \
             custom-unsigned.apk \
             patch/effects \
-            "${DEX_ARGS[@]}"
+            "${DEX_ARGS[@]}" \
+            --asset assets/custom_effects_editor.html=patch/custom-editor/custom_effects_editor.html
 
       - name: Prepare clone signing key
         env:
@@ -331,6 +334,13 @@ jobs:
               exit 1
             fi
           done
+
+          if ! cmp -s patch/custom-editor/custom_effects_editor.html \
+              <(unzip -p "$APK" assets/custom_effects_editor.html); then
+            echo "ERROR: assets/custom_effects_editor.html missing or different" >&2
+            exit 1
+          fi
+          echo "Custom Effects editor page present"
 
           echo
           echo "=== NATIVE LIBRARIES ==="
