@@ -152,7 +152,7 @@
 .end method
 
 
-.method public saveEffect(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+.method public saveEffect(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
     .registers 9
     .annotation runtime Landroid/webkit/JavascriptInterface;
     .end annotation
@@ -192,12 +192,20 @@
     invoke-direct {p0, p1, p2, p3}, Lcom/wowmancode/customfx/CustomEffectsBridge;->buildEffectXml(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
     move-result-object v3
 
-    invoke-static {p1, v3}, Lcom/wowmancode/customfx/CustomEffectsLoader;->registerEffect(Ljava/lang/String;Ljava/lang/String;)V
+    invoke-static {p1, v3}, Lcom/wowmancode/customfx/CustomEffectsLoader;->registerEffect(Ljava/lang/String;Ljava/lang/String;)Z
+    move-result v0
     :try_end
     .catch Ljava/lang/Exception; {:try_start .. :try_end} :catch_0
 
+    return v0
+
     :catch_0
-    return-void
+    move-exception v0
+    const-string v1, "CustomFX"
+    const-string v2, "Failed to save custom effect"
+    invoke-static {v1, v2, v0}, Landroid/util/Log;->e(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I
+    const/4 v0, 0x0
+    return v0
 .end method
 
 

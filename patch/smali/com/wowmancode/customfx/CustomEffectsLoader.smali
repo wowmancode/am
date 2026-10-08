@@ -76,9 +76,8 @@
     invoke-static {v7, v8, v5}, Lcom/wowmancode/customfx/CustomEffectsLoader;->buildEffectXml(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
     move-result-object v5
 
-    # Parse it into a VisualEffect
-    const/4 v6, 0x0
-    invoke-static {v5, v6}, Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffectParserKt;->visualEffectFromXml(Ljava/lang/String;Landroid/net/Uri;)Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffect;
+    # Parse it into a VisualEffect. The parser requires a non-null base URI.
+    invoke-static {v5}, Lcom/wowmancode/customfx/CustomEffectsLoader;->parseEffect(Ljava/lang/String;)Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffect;
     move-result-object v5
 
     # Put it in the map
@@ -126,13 +125,12 @@
 
 
 # Register a single effect at runtime (called from the JS bridge when saving)
-.method public static registerEffect(Ljava/lang/String;Ljava/lang/String;)V
+.method public static registerEffect(Ljava/lang/String;Ljava/lang/String;)Z
     .registers 6
     # p0 = id, p1 = effect XML string
 
     :try_start
-    const/4 v0, 0x0
-    invoke-static {p1, v0}, Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffectParserKt;->visualEffectFromXml(Ljava/lang/String;Landroid/net/Uri;)Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffect;
+    invoke-static {p1}, Lcom/wowmancode/customfx/CustomEffectsLoader;->parseEffect(Ljava/lang/String;)Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffect;
     move-result-object v0
 
     invoke-static {}, Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffectKt;->access$getLoadedVisualEffects$p()Ljava/util/Map;
@@ -152,8 +150,22 @@
     :try_end
     .catch Ljava/lang/Exception; {:try_start .. :try_end} :catch_0
 
+    const/4 v0, 0x1
+    return v0
+
     :catch_0
-    return-void
+    move-exception v0
+    const-string v1, "CustomFX"
+    new-instance v2, Ljava/lang/StringBuilder;
+    invoke-direct {v2}, Ljava/lang/StringBuilder;-><init>()V
+    const-string v3, "Failed to register effect: "
+    invoke-virtual {v2, v3}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    invoke-virtual {v2, p0}, Ljava/lang/StringBuilder;->append(Ljava/lang/String;)Ljava/lang/StringBuilder;
+    invoke-virtual {v2}, Ljava/lang/StringBuilder;->toString()Ljava/lang/String;
+    move-result-object v2
+    invoke-static {v1, v2, v0}, Landroid/util/Log;->e(Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)I
+    const/4 v0, 0x0
+    return v0
 .end method
 
 
@@ -175,6 +187,19 @@
 
 
 # ---- Helpers ----
+
+# visualEffectFromXml requires a non-null base URI even when the effect has no
+# external resources. Use the same asset namespace as the built-in effects so
+# optional relative resources are resolved consistently.
+.method private static parseEffect(Ljava/lang/String;)Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffect;
+    .registers 2
+    const-string v0, "file:///android_asset/effects"
+    invoke-static {v0}, Landroid/net/Uri;->parse(Ljava/lang/String;)Landroid/net/Uri;
+    move-result-object v0
+    invoke-static {p0, v0}, Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffectParserKt;->visualEffectFromXml(Ljava/lang/String;Landroid/net/Uri;)Lcom/alightcreative/app/motion/scene/visualeffect/VisualEffect;
+    move-result-object v0
+    return-object v0
+.end method
 
 .method private static buildEffectXml(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
     .registers 5

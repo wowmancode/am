@@ -167,7 +167,7 @@ let deleteTargetId = null;
 const Bridge = window.Android || {
   // Fallback stubs for testing in a browser
   loadEffects: () => '[]',
-  saveEffect: (id, name, code) => console.log('save', id, name),
+  saveEffect: (id, name, code) => { console.log('save', id, name); return true; },
   deleteEffect: (id) => console.log('delete', id),
   applyEffect: (id) => console.log('apply', id),
   exportPack: (json) => console.log('export', json),
@@ -330,7 +330,12 @@ function saveEffect() {
   editingId = id;
 
   try {
-    Bridge.saveEffect(id, name, code);
+    const registered = Bridge.saveEffect(id, name, code);
+    if (registered === false) {
+      setStatus('Save failed: the app could not register this effect', 'error');
+      Bridge.showToast('Could not register ' + name);
+      return;
+    }
     setStatus('Saved! Effect registered.', 'success');
     Bridge.showToast(name + ' saved');
   } catch(e) {
