@@ -20,6 +20,7 @@ on:
       - main
     paths:
       - "patch/effects/**"
+      - ".github/scripts/**"
       - ".github/workflows/build-patched-apk.yml"
 
 permissions:
@@ -194,6 +195,17 @@ jobs:
 
           print("Verified every original entry is unchanged.")
           PY
+
+      - name: Patch effect integrity signature
+        shell: bash
+        run: |
+          set -e
+
+          python3 .github/scripts/patch-effect-sig.py \
+            custom-unsigned.apk \
+            custom-patched.apk
+
+          mv custom-patched.apk custom-unsigned.apk
 
       - name: Prepare clone signing key
         env:
