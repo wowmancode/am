@@ -41,8 +41,12 @@
 
     invoke-virtual {p0}, Landroid/view/View;->getLayoutParams()Landroid/view/ViewGroup$LayoutParams;
     move-result-object v2
-    invoke-virtual {v1, v2}, Landroid/view/View;->setLayoutParams(Landroid/view/ViewGroup$LayoutParams;)V
     iget v3, v2, Landroid/view/ViewGroup$LayoutParams;->height:I
+    # The wrapper contains two rows, so the RecyclerView item must measure both.
+    # Keeping the original fixed height clips the Transitions row entirely.
+    const/4 v6, -0x2
+    iput v6, v2, Landroid/view/ViewGroup$LayoutParams;->height:I
+    invoke-virtual {v1, v2}, Landroid/view/View;->setLayoutParams(Landroid/view/ViewGroup$LayoutParams;)V
     new-instance v4, Landroid/widget/LinearLayout$LayoutParams;
     const/4 v5, -0x1
     invoke-direct {v4, v5, v3}, Landroid/widget/LinearLayout$LayoutParams;-><init>(II)V
