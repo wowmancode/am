@@ -203,22 +203,8 @@ jobs:
 
             echo "Using persistent clone signing key from GitHub Secrets."
           else
-            echo "::warning::No PATCH_KEYSTORE_B64 secret is configured. Generating an ephemeral key; builds signed this way cannot update one another without uninstalling the previous clone."
-
-            PATCH_KEYSTORE_PASSWORD="android"
-            PATCH_KEY_PASSWORD="android"
-            PATCH_KEY_ALIAS="patch"
-
-            keytool \
-              -genkeypair \
-              -keystore patch.keystore \
-              -storepass "$PATCH_KEYSTORE_PASSWORD" \
-              -keypass "$PATCH_KEY_PASSWORD" \
-              -alias "$PATCH_KEY_ALIAS" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Alight Motion Personal Clone"
+            echo "::error::Persistent signing secret missing. Run .github/scripts/setup-update-signing.sh with a repository admin account."
+            exit 1
           fi
 
           echo "PATCH_KEYSTORE_PASSWORD=$PATCH_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"

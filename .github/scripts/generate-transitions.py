@@ -117,8 +117,14 @@ void main() {
 {direction_vector}
     float edge = mode == 0 ? acTime - acStartTime : acEndTime - acTime;
     float pulse = 1.0 - smoothstep(0.0, 1.0, clamp(edge / max(duration, 0.01), 0.0, 1.0));
-    float k = pulse * strength;
     vec4 src = texture2D(inputImg.texture, uv);
+    // Most frames lie outside the short transition window. A single sample
+    // avoids the multi-sample look (and all its math) on those frames.
+    if (pulse <= 0.0) {
+        gl_FragColor = src;
+        return;
+    }
+    float k = pulse * strength;
     vec4 fx = src;
 {look}
     fx.rgb = mix(fx.rgb, vec3(fx.a), clamp(flash * pulse, 0.0, 1.0));

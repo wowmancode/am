@@ -16,6 +16,9 @@ is reassembled. It:
 
 4. Adds a Transitions row under Add Effect in the Effects list.
 
+5. Adds a home-screen Project XML picker which forwards files to the app's
+   existing native ImportActivity.
+
 The editor is a dialog over the effect browser rather than its own activity,
 so the manifest does not change. Its HTML page is added to the APK's assets
 by add-effects.py.
@@ -33,6 +36,7 @@ LOADER_CLASS = "VisualEffectKt$initVisualEffects$1.smali"
 BROWSER_CLASS = "EffectBrowserActivity.smali"
 EFFECTS_FRAGMENT = "smali/i1/k.smali"
 EFFECTS_ADAPTER = "smali/i1/i.smali"
+MAIN_ACTIVITY = "smali_classes4/com/alightcreative/app/motion/activities/main/MainActivity.smali"
 MARKER = "Lcom/wowmancode/customfx/"
 
 
@@ -144,6 +148,37 @@ def patch_transitions_row(decoded: Path) -> None:
     print("  Added the Transitions row to Effects", file=sys.stderr)
 
 
+def patch_project_import(decoded: Path) -> None:
+    path = decoded / MAIN_ACTIVITY
+    if not path.is_file():
+        raise SystemExit("ERROR: MainActivity is missing")
+    text = path.read_text(encoding="utf-8")
+    if "ProjectImportUi;->attachButton" not in text:
+        method = re.search(r"\.method protected onCreate\(Landroid/os/Bundle;\)V\n.*?\.end method", text, re.S)
+        if not method:
+            raise SystemExit("ERROR: MainActivity onCreate is missing")
+        anchor = "invoke-virtual {v0, v1}, Landroidx/appcompat/app/c;->setContentView(I)V"
+        if method.group(0).count(anchor) != 1:
+            raise SystemExit("ERROR: MainActivity layout hook changed")
+        patched = method.group(0).replace(anchor, anchor +
+            "\n    invoke-static/range {p0 .. p0}, Lcom/wowmancode/customfx/ProjectImportUi;->attachButton(Landroid/app/Activity;)V")
+        text = text[:method.start()] + patched + text[method.end():]
+
+    if "ProjectImportUi;->onActivityResult" not in text:
+        anchor = ".method protected onActivityResult(IILandroid/content/Intent;)V\n    .locals 3"
+        if text.count(anchor) != 1:
+            raise SystemExit("ERROR: MainActivity result hook changed")
+        hook = ("\n    invoke-static {p0, p1, p2, p3}, Lcom/wowmancode/customfx/ProjectImportUi;"
+                "->onActivityResult(Landroid/app/Activity;IILandroid/content/Intent;)Z\n"
+                "    move-result v0\n"
+                "    if-eqz v0, :project_import_other\n"
+                "    return-void\n"
+                "    :project_import_other")
+        text = text.replace(anchor, anchor + hook)
+    path.write_text(text, encoding="utf-8")
+    print("  Added native Project XML import to MainActivity", file=sys.stderr)
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit(f"Usage: {sys.argv[0]} <patch-dir> <decoded-dir>")
@@ -158,6 +193,7 @@ def main() -> None:
     patch_effect_loader(decoded)
     patch_effect_browser(decoded)
     patch_transitions_row(decoded)
+    patch_project_import(decoded)
 
 
 if __name__ == "__main__":

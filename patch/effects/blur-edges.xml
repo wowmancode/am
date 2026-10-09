@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<effect id="com.wowmancode.effects.bluredges" name="@string/name" desc="@string/desc" category="blur" tags="blur,soften,edge,raster,custom">
+    <strings><locale lang="en">
+        <string name="name">Blur Edges</string>
+        <string name="desc">Softens the outer edges of a layer while keeping the center sharp.</string>
+        <string name="width">Edge Width</string>
+        <string name="radius">Blur Radius</string>
+        <string name="strength">Strength</string>
+    </locale></strings>
+    <params>
+        <texture id="inputImg" srcType="content" />
+        <spinner id="width" default="0.18" min="0.01" max="0.5" step="0.01" label="@string/width" type="percent" />
+        <spinner id="radius" default="12.0" min="0.0" max="60.0" step="0.5" label="@string/radius" />
+        <spinner id="strength" default="1.0" min="0.0" max="1.0" step="0.01" label="@string/strength" type="percent" />
+    </params>
+    <shader type="fragment" precision="high"><![CDATA[
+        void main() {
+            vec2 uv = acScreenNorm;
+            vec4 src = texture2D(inputImg.texture, uv);
+            float edgeDistance = min(min(uv.x, 1.0 - uv.x), min(uv.y, 1.0 - uv.y));
+            float amount = strength * (1.0 - smoothstep(0.0, max(width, 0.001), edgeDistance));
+            if (amount <= 0.001 || radius <= 0.0) {
+                gl_FragColor = src;
+                return;
+            }
+
+            vec2 stepUv = vec2(radius) / max(acScreenSize, vec2(1.0));
+            vec4 blurred = src * 4.0;
+            blurred += texture2D(inputImg.texture, clamp(uv + vec2( stepUv.x, 0.0), 0.0, 1.0)) * 2.0;
+            blurred += texture2D(inputImg.texture, clamp(uv + vec2(-stepUv.x, 0.0), 0.0, 1.0)) * 2.0;
+            blurred += texture2D(inputImg.texture, clamp(uv + vec2(0.0,  stepUv.y), 0.0, 1.0)) * 2.0;
+            blurred += texture2D(inputImg.texture, clamp(uv + vec2(0.0, -stepUv.y), 0.0, 1.0)) * 2.0;
+            blurred += texture2D(inputImg.texture, clamp(uv + vec2( stepUv.x,  stepUv.y), 0.0, 1.0));
+            blurred += texture2D(inputImg.texture, clamp(uv + vec2(-stepUv.x,  stepUv.y), 0.0, 1.0));
+            blurred += texture2D(inputImg.texture, clamp(uv + vec2( stepUv.x, -stepUv.y), 0.0, 1.0));
+            blurred += texture2D(inputImg.texture, clamp(uv + vec2(-stepUv.x, -stepUv.y), 0.0, 1.0));
+            gl_FragColor = mix(src, blurred / 16.0, amount);
+        }
+    ]]></shader>
+</effect>
