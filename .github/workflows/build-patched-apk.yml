@@ -170,11 +170,16 @@ jobs:
             DEX_ARGS+=(--dex "$DEX=rebuilt-dex/$DEX")
           done
 
+          unzip -p source.apk resources.arsc > source-resources.arsc
+          python3 .github/scripts/rename-app-label.py \
+            source-resources.arsc renamed-resources.arsc
+
           python3 .github/scripts/add-effects.py build \
             source.apk \
             custom-unsigned.apk \
             patch/effects \
             "${DEX_ARGS[@]}" \
+            --resources renamed-resources.arsc \
             --asset assets/custom_effects_editor.html=patch/custom-editor/custom_effects_editor.html
 
       - name: Prepare clone signing key
@@ -266,7 +271,7 @@ jobs:
             --v1-signing-enabled "$V1_SIGNING" \
             --v2-signing-enabled true \
             --v3-signing-enabled true \
-            --out output/Alight.Motion.Custom.apk \
+            --out output/Alight.Motion+.apk \
             custom-aligned.apk
 
           echo
@@ -276,7 +281,7 @@ jobs:
             --min-sdk-version "$SOURCE_MIN_SDK" \
             --verbose \
             --print-certs \
-            output/Alight.Motion.Custom.apk
+            output/Alight.Motion+.apk
 
           echo
           echo "=== VERIFYING ALIGNMENT ==="
@@ -286,7 +291,7 @@ jobs:
             -P 16 \
             -v \
             4 \
-            output/Alight.Motion.Custom.apk |
+            output/Alight.Motion+.apk |
             tail -5
 
       - name: Verify output
@@ -294,7 +299,7 @@ jobs:
         run: |
           set -e
 
-          APK=output/Alight.Motion.Custom.apk
+          APK=output/Alight.Motion+.apk
 
           export BUILD_TOOLS
           .github/scripts/apk-info.sh "$APK" OUTPUT_ | tee output-info.env
@@ -318,6 +323,11 @@ jobs:
 
           if [ "$VERSION_CODE" != "$SOURCE_VERSION_CODE" ]; then
             echo "ERROR: versionCode changed from $SOURCE_VERSION_CODE to $VERSION_CODE" >&2
+            exit 1
+          fi
+
+          if ! cmp -s renamed-resources.arsc <(unzip -p "$APK" resources.arsc); then
+            echo "ERROR: renamed app-label resource table missing or different" >&2
             exit 1
           fi
 
@@ -348,7 +358,7 @@ jobs:
           python3 - <<'PY'
           from zipfile import ZIP_STORED, ZipFile
 
-          with ZipFile("output/Alight.Motion.Custom.apk") as archive:
+          with ZipFile("output/Alight.Motion+.apk") as archive:
               libraries = [
                   entry for entry in archive.infolist()
                   if entry.filename.startswith("lib/") and entry.filename.endswith(".so")
@@ -375,7 +385,7 @@ jobs:
           set -e
 
           cd output
-          sha256sum Alight.Motion.Custom.apk | tee Alight.Motion.Custom.apk.sha256
+          sha256sum Alight.Motion+.apk | tee Alight.Motion+.apk.sha256
           ls -lh
 
       # The APK goes to a release rather than an Actions artifact: artifact
@@ -392,9 +402,10 @@ jobs:
             printf 'Custom build of release %s\n\n' "$SOURCE_RELEASE"
             printf 'Package: %s\nVersion: %s (%s)\n\n' \
               "$SOURCE_PACKAGE" "$SOURCE_VERSION_NAME" "$SOURCE_VERSION_CODE"
+            printf 'App label: Alight Motion+\nAPK: Alight.Motion+.apk\n\n'
             printf 'Built by %s/%s/actions/runs/%s\n\n' \
               "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
-            printf 'SHA-256:\n%s\n' "$(cat output/Alight.Motion.Custom.apk.sha256)"
+            printf 'SHA-256:\n%s\n' "$(cat output/Alight.Motion+.apk.sha256)"
           )"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -407,8 +418,8 @@ jobs:
           fi
 
           gh release upload "$TAG" \
-            output/Alight.Motion.Custom.apk \
-            output/Alight.Motion.Custom.apk.sha256 \
+            output/Alight.Motion+.apk \
+            output/Alight.Motion+.apk.sha256 \
             --clobber
 
           echo "Published release $TAG"

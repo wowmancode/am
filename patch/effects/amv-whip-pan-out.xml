@@ -1,0 +1,45 @@
+<?xml version='1.0' encoding='UTF-8' ?>
+<effect id="com.wowmancode.transitions.whippan.out" name="@string/name" desc="@string/desc" category="distort" tags="custom,transition,amv,distort,color">
+    <strings><locale lang="en">
+        <string name="name">AMV Whip Pan Out</string>
+        <string name="desc">Fast directional sweep with sampled motion blur. Starts at the end of the layer.</string>
+        <string name="mode">Edge</string><string name="in">In</string><string name="out">Out</string>
+        <string name="duration">Duration (seconds)</string>
+        <string name="strength">Strength</string><string name="speed">Motion Speed</string>
+        <string name="angle">Direction</string><string name="flash">Flash</string><string name="fade">Fade to transparent</string>
+    </locale></strings>
+    <params>
+        <texture id="inputImg" srcType="content" />
+        <selector id="mode" default="1" style="dropdown" label="@string/mode">
+            <choice label="@string/in" value="0" /><choice label="@string/out" value="1" />
+        </selector>
+        <spinner id="duration" default="0.35" min="0.08" max="2.0" step="0.01" label="@string/duration" />
+        <spinner id="strength" default="1.0" min="0.0" max="2.0" step="0.01" label="@string/strength" />
+        <spinner id="angle" default="0.0" min="-180.0" max="180.0" step="1.0" label="@string/angle" />
+        <spinner id="flash" default="0.0" min="0.0" max="1.0" step="0.01" label="@string/flash" type="percent" />
+        <spinner id="fade" default="0.0" min="0.0" max="1.0" step="0.01" label="@string/fade" type="percent" />
+    </params>
+    <shader type="fragment" precision="high"><![CDATA[
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+void main() {
+    vec2 uv = acScreenNorm;
+    vec2 dir = vec2(cos(radians(angle)), sin(radians(angle)));
+    float edge = mode == 0 ? acTime - acStartTime : acEndTime - acTime;
+    float pulse = 1.0 - smoothstep(0.0, 1.0, clamp(edge / max(duration, 0.01), 0.0, 1.0));
+    float k = pulse * strength;
+    vec4 src = texture2D(inputImg.texture, uv);
+    vec4 fx = src;
+
+        vec2 shift = dir * k * 0.65;
+        fx = vec4(0.0);
+        for (int i = 0; i < 7; i++) {
+            float x = float(i) / 6.0;
+            fx += texture2D(inputImg.texture, clamp(uv + shift * (1.0 - x), 0.0, 1.0)) / 7.0;
+        }
+    
+    fx.rgb = mix(fx.rgb, vec3(fx.a), clamp(flash * pulse, 0.0, 1.0));
+    fx.a *= 1.0 - clamp(fade * pulse, 0.0, 1.0);
+    gl_FragColor = fx;
+}
+    ]]></shader>
+</effect>
