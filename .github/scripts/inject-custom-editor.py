@@ -19,6 +19,9 @@ is reassembled. It:
 5. Adds a home-screen Project XML picker which forwards files to the app's
    existing native ImportActivity.
 
+6. Lets effect value labels open a numeric keyboard for slider and spinner
+   controls, using their existing change handlers to persist the value.
+
 The editor is a dialog over the effect browser rather than its own activity,
 so the manifest does not change. Its HTML page is added to the APK's assets
 by add-effects.py.
@@ -36,6 +39,7 @@ LOADER_CLASS = "VisualEffectKt$initVisualEffects$1.smali"
 BROWSER_CLASS = "EffectBrowserActivity.smali"
 EFFECTS_FRAGMENT = "smali/i1/k.smali"
 EFFECTS_ADAPTER = "smali/i1/i.smali"
+EFFECT_PARAMETER_ROW = "smali/i1/k$a$a.smali"
 MAIN_ACTIVITY = "smali_classes4/com/alightcreative/app/motion/activities/main/MainActivity.smali"
 MARKER = "Lcom/wowmancode/customfx/"
 
@@ -179,6 +183,35 @@ def patch_project_import(decoded: Path) -> None:
     print("  Added native Project XML import to MainActivity", file=sys.stderr)
 
 
+def patch_effect_number_edit(decoded: Path) -> None:
+    path = decoded / EFFECT_PARAMETER_ROW
+    if not path.is_file():
+        raise SystemExit("ERROR: Effects parameter row is missing")
+    text = path.read_text(encoding="utf-8")
+    if "EffectNumberEdit;->bind" in text:
+        return
+    value_view = (
+        "iget-object v0, v11, Landroidx/recyclerview/widget/RecyclerView$d0;->a:Landroid/view/View;\n"
+        "    sget v1, Lf1/e;->Ma:I\n"
+        "    invoke-virtual {v0, v1}, Landroid/view/View;->findViewById(I)Landroid/view/View;\n"
+        "    move-result-object v0\n"
+        "    check-cast v0, Landroid/widget/TextView;\n"
+        "    move-object/from16 v1, p1\n"
+    )
+    spinner = "invoke-virtual {v13, v7}, Lcom/alightcreative/widget/ValueSpinner;->setOnSpinAbs(Lkotlin/jvm/functions/Function1;)V"
+    slider = "invoke-virtual {v10, v12}, Lcom/alightcreative/widget/AlightSlider;->setOnSeekBarChangeListener(Landroid/widget/SeekBar$OnSeekBarChangeListener;)V"
+    if text.count(spinner) != 1 or text.count(slider) != 1:
+        raise SystemExit("ERROR: Effects parameter controls changed")
+    text = text.replace(spinner, spinner + "\n    " + value_view +
+        "    invoke-static {v1, v0, v13}, Lcom/wowmancode/customfx/EffectNumberEdit;"
+        "->bind(Lcom/alightcreative/app/motion/scene/userparam/UserParameter;Landroid/widget/TextView;Landroid/view/View;)V")
+    text = text.replace(slider, slider + "\n    " + value_view +
+        "    invoke-static {v1, v0, v10}, Lcom/wowmancode/customfx/EffectNumberEdit;"
+        "->bind(Lcom/alightcreative/app/motion/scene/userparam/UserParameter;Landroid/widget/TextView;Landroid/view/View;)V")
+    path.write_text(text, encoding="utf-8")
+    print("  Added tap-to-edit numeric effect values", file=sys.stderr)
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit(f"Usage: {sys.argv[0]} <patch-dir> <decoded-dir>")
@@ -194,6 +227,7 @@ def main() -> None:
     patch_effect_browser(decoded)
     patch_transitions_row(decoded)
     patch_project_import(decoded)
+    patch_effect_number_edit(decoded)
 
 
 if __name__ == "__main__":
