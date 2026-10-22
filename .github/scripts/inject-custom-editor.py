@@ -22,6 +22,8 @@ is reassembled. It:
 6. Lets effect value labels open a numeric keyboard for slider and spinner
    controls, using their existing change handlers to persist the value.
 
+7. Uses the empty scene overlay for preview and export, removing the watermark.
+
 The editor is a dialog over the effect browser rather than its own activity,
 so the manifest does not change. Its HTML page is added to the APK's assets
 by add-effects.py.
@@ -212,6 +214,39 @@ def patch_effect_number_edit(decoded: Path) -> None:
     print("  Added tap-to-edit numeric effect values", file=sys.stderr)
 
 
+def patch_scene_overlay(decoded: Path) -> None:
+    path = find_one(decoded, "SceneOverlayKt.smali")
+    find_one(decoded, "SceneOverlay_None.smali")
+    text = path.read_text(encoding="utf-8")
+    signature = (
+        ".method public static final getCurrentSceneOverlay("
+        "Lcom/alightcreative/app/motion/scene/Scene;"
+        "Lcom/alightcreative/app/motion/scene/ExportParams;)"
+        "Lcom/alightcreative/app/motion/scene/SceneOverlay;\n"
+    )
+    methods = list(re.finditer(re.escape(signature) + r".*?^\.end method", text, re.S | re.M))
+    if len(methods) != 1:
+        raise SystemExit("ERROR: scene overlay selector changed")
+    method = methods[0]
+    body = method.group(0)
+    old = (
+        "sget-object p0, Lcom/alightcreative/app/motion/scene/SceneOverlay_StandardWM;"
+        "->INSTANCE:Lcom/alightcreative/app/motion/scene/SceneOverlay_StandardWM;"
+    )
+    new = (
+        "# Use the empty overlay for personal builds.\n    "
+        "sget-object p0, Lcom/alightcreative/app/motion/scene/SceneOverlay_None;"
+        "->INSTANCE:Lcom/alightcreative/app/motion/scene/SceneOverlay_None;"
+    )
+    if old not in body and body.count(new) == 1:
+        return
+    if body.count(old) != 1:
+        raise SystemExit("ERROR: expected one standard watermark overlay fallback")
+    body = body.replace(old, new)
+    path.write_text(text[:method.start()] + body + text[method.end():], encoding="utf-8")
+    print("  Disabled the watermark in scene preview and export", file=sys.stderr)
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit(f"Usage: {sys.argv[0]} <patch-dir> <decoded-dir>")
@@ -228,6 +263,7 @@ def main() -> None:
     patch_transitions_row(decoded)
     patch_project_import(decoded)
     patch_effect_number_edit(decoded)
+    patch_scene_overlay(decoded)
 
 
 if __name__ == "__main__":
