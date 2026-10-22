@@ -37,6 +37,10 @@ vec4 fxPortSample(sampler2D image, vec2 uv) {
 """
 MAIN = """
 void main() {
+    if (uControl1 <= 0.0) {
+        gl_FragColor = texture2D(inputImg.texture, clamp(acScreenNorm, 0.0, 1.0));
+        return;
+    }
     fxPortMain();
     gl_FragColor = vec4(fxPortOutput.rgb * fxPortOutput.a, fxPortOutput.a);
 }
@@ -74,6 +78,41 @@ def convert(source: str, labels: list[str]) -> tuple[str, list[str]]:
 def render(source: str, entry: dict, provenance: dict) -> str:
     shader, controls = convert(source, entry["controls"])
     name = entry["source"]
+    vertex_xml = ""
+    if name == "vegas_2d_shadow.glsl":
+        # The same 65 weights were evaluated for each of the 65 rows.
+        # Keep the sampling and accumulation order, but reuse those weights.
+        anchor = "        for (int row = 0; row < 65; ++row) {"
+        if shader.count(anchor) != 1:
+            raise ValueError("Shadow sampling loop changed")
+        shader = shader.replace(anchor,
+            "        float weights[65];\n"
+            "        for (int tap = 0; tap < 65; ++tap) {\n"
+            "            weights[tap] = impulse((float(tap) - 32.0) * spacing, sigma) * spacing;\n"
+            "        }\n" + anchor)
+        shader = shader.replace("float wy = impulse(y, sigma) * spacing;", "float wy = weights[row];")
+        shader = shader.replace("float wx = impulse(x, sigma) * spacing;", "float wx = weights[column];")
+    if name == "newblue_earthquake.glsl":
+        # Motion depends only on time and controls. Replaying up to 4096
+        # historical steps for every pixel made real editor playback costly.
+        # Evaluate it at the vertices and interpolate the identical result.
+        start, end = shader.index("vec4 frameBytes("), shader.index("vec4 pixelColor(")
+        helpers = shader[start:end]
+        calculation = re.search(r"    float bound = .*?    nativeMotion\(frame, bound, velocity, motion, previous, blur\);", shader, re.S)
+        if calculation is None:
+            raise ValueError("Earthquake motion calculation changed")
+        varyings = ("varying highp vec3 fxMotion;\n"
+                    "varying highp vec2 fxPrevious;\n"
+                    "varying highp float fxBlur;\n")
+        vertex = ("precision highp float;\nuniform float acTime;\nuniform float acStartTime;\n" +
+                  varyings + helpers + "void main() {\n    vertShaderInit();\n" +
+                  "    fxMotion = vec3(0.0);\n    fxPrevious = vec2(0.0);\n    fxBlur = 0.0;\n"
+                  "    if (uControl1 <= 0.0) return;\n" + calculation.group() +
+                  "\n    fxMotion = motion;\n    fxPrevious = previous;\n    fxBlur = blur;\n}\n")
+        shader = shader.replace(calculation.group(),
+                                "    vec3 motion = fxMotion;\n    vec2 previous = fxPrevious;\n    float blur = fxBlur;")
+        shader = varyings + shader.replace(helpers, "")
+        vertex_xml = f'    <shader type="vertex"><![CDATA[\n{vertex}    ]]></shader>\n'
     description = entry["description"]
     strings = [("name", entry["name"]), ("desc", description)]
     strings += list(zip(controls, entry["controls"]))
@@ -101,7 +140,7 @@ def render(source: str, entry: dict, provenance: dict) -> str:
     <params>
 {param_xml}
     </params>
-    <shader type="fragment" precision="high"><![CDATA[
+{vertex_xml}    <shader type="fragment" precision="high"><![CDATA[
 {shader}    ]]></shader>
 </effect>
 '''

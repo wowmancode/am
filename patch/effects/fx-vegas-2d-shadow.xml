@@ -108,13 +108,17 @@ void fxPortMain() {
         float radius = blur * max(size.x, size.y);
         float sigma = max((radius + 1.5) / 3.329042969130445, 0.6);
         float spacing = max(floor(5.0 * sigma / 32.0), 1.0);
+        float weights[65];
+        for (int tap = 0; tap < 65; ++tap) {
+            weights[tap] = impulse((float(tap) - 32.0) * spacing, sigma) * spacing;
+        }
         for (int row = 0; row < 65; ++row) {
             float y = (float(row) - 32.0) * spacing;
-            float wy = impulse(y, sigma) * spacing;
+            float wy = weights[row];
             float horizontal = 0.0;
             for (int column = 0; column < 65; ++column) {
                 float x = (float(column) - 32.0) * spacing;
-                float wx = impulse(x, sigma) * spacing;
+                float wx = weights[column];
                 horizontal += alphaAt(pixel - vec2(x, y), size,
                                       center, scale, rotation) * wx;
             }
@@ -134,6 +138,10 @@ void fxPortMain() {
 }
 
 void main() {
+    if (uControl1 <= 0.0) {
+        gl_FragColor = texture2D(inputImg.texture, clamp(acScreenNorm, 0.0, 1.0));
+        return;
+    }
     fxPortMain();
     gl_FragColor = vec4(fxPortOutput.rgb * fxPortOutput.a, fxPortOutput.a);
 }

@@ -18,6 +18,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SPEC = importlib.util.spec_from_file_location("shader_check", Path(__file__).with_name("check-shaders.py"))
 CHECK = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(CHECK)
+PORT_SPEC = importlib.util.spec_from_file_location("fx_import", Path(__file__).with_name("import-fx-filters.py"))
+PORT = importlib.util.module_from_spec(PORT_SPEC)
+PORT_SPEC.loader.exec_module(PORT)
 VERTEX = """#version 330
 out vec2 vTexSamplingCoord;
 out vec2 acScreenNorm;
@@ -36,6 +39,21 @@ def desktop(source):
     source = re.sub(r"\btexture2D\b", "texture", source)
     source = re.sub(r"\bgl_FragColor\b", "fragment", source)
     return "#version 330\nout vec4 fragment;\n" + source
+
+
+def vertex_for(path):
+    source = CHECK.assemble(path, "vertex")
+    source = re.sub(r"^#version[^\n]*\n", "", source)
+    source = re.sub(r"precision\s+\w+\s+\w+\s*;", "", source)
+    source = re.sub(r"\b(highp|mediump|lowp)\b", "", source)
+    source = re.sub(r"attribute vec4 ac_internal_position;", "", source)
+    source = re.sub(r"attribute vec2 ac_internal_texcoord;", "", source)
+    source = source.replace("varying", "out")
+    source = source.replace("gl_Position = ac_internal_position;",
+        "vec2 p = vec2(gl_VertexID == 1 ? 3.0 : -1.0, gl_VertexID == 2 ? 3.0 : -1.0);\n"
+        "    vec2 ac_internal_texcoord = 0.5 * p + vec2(0.5);\n"
+        "    gl_Position = vec4(p, 0.0, 1.0);")
+    return "#version 330\n" + source
 
 
 def main():
@@ -62,12 +80,15 @@ def main():
     fbo.use()
     ctx.viewport = (0, 0, width, height)
 
-    def render(program, image, controls):
+    def render(program, image, controls, time=1.5):
         texture.write(np.ascontiguousarray(image).tobytes())
         texture.use(0)
         values = {"uTexSampler": 0, "inputImg.texture": 0,
-                  "uWidth": width, "uHeight": height, "uTime": 1.5,
-                  "acScreenSize": (width, height), "acTime": 6.5, "acStartTime": 5.0}
+                  # Match the host's float32 layer-local time, particularly
+                  # at exact frame boundaries late in a project.
+                  "uWidth": width, "uHeight": height,
+                  "uTime": float(np.float32(np.float32(time + 5.0) - np.float32(5.0))),
+                  "acScreenSize": (width, height), "acTime": time + 5.0, "acStartTime": 5.0}
         values.update({f"uControl{i}": value for i, value in enumerate(controls, 1)})
         for name, value in values.items():
             if name in program:
@@ -85,7 +106,7 @@ def main():
         raw = (ROOT / "patch/fx/shaders" / entry["source"]).read_text()
         xml = ROOT / "patch/effects" / ("fx-" + stem.replace("_", "-") + ".xml")
         reference = ctx.program(vertex_shader=VERTEX, fragment_shader=desktop(raw))
-        port = ctx.program(vertex_shader=VERTEX, fragment_shader=desktop(CHECK.assemble(xml)))
+        port = ctx.program(vertex_shader=vertex_for(xml), fragment_shader=desktop(CHECK.assemble(xml)))
         error = 0.0
         for image in (gradient, checker, cutout):
             premultiplied = image.copy()
@@ -103,6 +124,27 @@ def main():
                     assert np.max(np.abs(actual - premultiplied)) < 1e-5, stem
                 error = max(error, delta)
                 total += 1
+        if stem == "newblue_earthquake":
+            # Includes the 4096-step history boundary, fractional time, zero
+            # velocity, control extremes, and a nonzero layer start time.
+            # Compare against the original fragment-only host adaptation:
+            # host-local time arithmetic at exact frame boundaries must be
+            # preserved, including float32 rounding of (time - startTime).
+            baseline_source, names = PORT.convert(raw, entry["controls"])
+            baseline = ctx.program(vertex_shader=VERTEX, fragment_shader=desktop(
+                CHECK.PREAMBLE.replace("{precision}", "highp") +
+                "\nuniform AC_ImageInfo inputImg;\n" +
+                "\n".join(f"uniform float {name};" for name in names) + "\n" + baseline_source))
+            for time in (0.0, 1 / 30, 10.125, 4096 / 30, 140.0):
+                for controls in (cases["defaults"], cases["adjusted"],
+                                 [1, 2, -2], [1, -2, 2]):
+                    expected = render(baseline, gradient, controls, time)
+                    actual = render(port, gradient, controls, time)
+                    delta = float(np.max(np.abs(actual - expected)))
+                    assert np.all(np.isfinite(actual)) and delta <= 1 / 255, (stem, time, controls, delta)
+                    error = max(error, delta)
+                    total += 1
+            baseline.release()
         reference.release()
         port.release()
         worst = max(worst, error)

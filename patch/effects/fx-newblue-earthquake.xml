@@ -15,16 +15,13 @@
         <spinner id="uControl2" default="0.0" min="-2.0" max="2.0" step="0.01" label="@string/uControl2" />
         <spinner id="uControl3" default="0.0" min="-2.0" max="2.0" step="0.01" label="@string/uControl3" />
     </params>
-    <shader type="fragment" precision="high"><![CDATA[
-vec4 fxPortOutput;
-
-vec4 fxPortSample(sampler2D image, vec2 uv) {
-    vec4 color = texture2D(image, uv);
-    if (color.a > 0.0) color.rgb /= color.a;
-    else color.rgb = vec3(0.0);
-    return color;
-}
-
+    <shader type="vertex"><![CDATA[
+precision highp float;
+uniform float acTime;
+uniform float acStartTime;
+varying highp vec3 fxMotion;
+varying highp vec2 fxPrevious;
+varying highp float fxBlur;
 vec4 frameBytes(float value) {
     return mod(floor(vec4(value, value / 256.0,
                          value / 65536.0, value / 16777216.0)), 256.0);
@@ -88,6 +85,37 @@ void nativeMotion(float frame, float bound, float velocity,
     }
 }
 
+void main() {
+    vertShaderInit();
+    fxMotion = vec3(0.0);
+    fxPrevious = vec2(0.0);
+    fxBlur = 0.0;
+    if (uControl1 <= 0.0) return;
+    float bound = clamp(0.99 * exp2(uControl2), 0.0, 1.0) * 0.06;
+    float velocity = clamp(0.99 * exp2(uControl3), 0.0, 1.0);
+    float frame = floor(max((acTime - acStartTime), 0.0) * 30.0 + 0.00001);
+    vec3 motion;
+    vec2 previous;
+    float blur;
+    nativeMotion(frame, bound, velocity, motion, previous, blur);
+    fxMotion = motion;
+    fxPrevious = previous;
+    fxBlur = blur;
+}
+    ]]></shader>
+    <shader type="fragment" precision="high"><![CDATA[
+varying highp vec3 fxMotion;
+varying highp vec2 fxPrevious;
+varying highp float fxBlur;
+vec4 fxPortOutput;
+
+vec4 fxPortSample(sampler2D image, vec2 uv) {
+    vec4 color = texture2D(image, uv);
+    if (color.a > 0.0) color.rgb /= color.a;
+    else color.rgb = vec3(0.0);
+    return color;
+}
+
 vec4 pixelColor(vec2 pixel, vec2 size) {
     vec2 uv = (clamp(pixel, vec2(0.0), size - vec2(1.0)) + vec2(0.5)) / size;
     uv.y = 1.0 - uv.y;
@@ -117,13 +145,9 @@ void fxPortMain() {
     vec4 source = fxPortSample(inputImg.texture, uv);
     vec2 size = vec2(max(acScreenSize.x, 1.0), max(acScreenSize.y, 1.0));
     vec2 pixel = vec2(uv.x, 1.0 - uv.y) * size - vec2(0.5);
-    float bound = clamp(0.99 * exp2(uControl2), 0.0, 1.0) * 0.06;
-    float velocity = clamp(0.99 * exp2(uControl3), 0.0, 1.0);
-    float frame = floor(max((acTime - acStartTime), 0.0) * 30.0 + 0.00001);
-    vec3 motion;
-    vec2 previous;
-    float blur;
-    nativeMotion(frame, bound, velocity, motion, previous, blur);
+    vec3 motion = fxMotion;
+    vec2 previous = fxPrevious;
+    float blur = fxBlur;
     vec4 result = shiftedImage(pixel, size, motion.xy, motion.z);
     if (blur > 0.5) {
         result = mix(result, shiftedImage(pixel, size, previous, motion.z), 0.5);
@@ -132,6 +156,10 @@ void fxPortMain() {
 }
 
 void main() {
+    if (uControl1 <= 0.0) {
+        gl_FragColor = texture2D(inputImg.texture, clamp(acScreenNorm, 0.0, 1.0));
+        return;
+    }
     fxPortMain();
     gl_FragColor = vec4(fxPortOutput.rgb * fxPortOutput.a, fxPortOutput.a);
 }

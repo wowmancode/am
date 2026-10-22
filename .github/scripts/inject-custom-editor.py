@@ -22,6 +22,9 @@ is reassembled. It:
 
 6. Uses the empty scene overlay for preview and export, removing the watermark.
 
+7. Removes diagnostic work from the live preview loop and adds an optional
+   per-player Preview FPS button in the editor.
+
 The editor is a dialog over the effect browser rather than its own activity,
 so the manifest does not change. Its HTML page is added to the APK's assets
 by add-effects.py.
@@ -217,6 +220,98 @@ def patch_scene_overlay(decoded: Path) -> None:
     print("  Disabled the watermark in scene preview and export", file=sys.stderr)
 
 
+def patch_native_preview(decoded: Path) -> None:
+    player = find_one(decoded, "ScenePlayer.smali")
+    worker = find_one(decoded, "ScenePlayer$2.smali")
+    request = find_one(decoded, "ScenePlayer$renderFrame$2.smali")
+    editor = find_one(decoded, "EditActivity.smali")
+    gl_context = find_one(decoded, "GLContext.smali")
+    text = gl_context.read_text(encoding="utf-8")
+    method = re.search(r"^\.method public final l0\(\)I\n.*?^\.end method", text, re.M | re.S)
+    if not method:
+        raise SystemExit("ERROR: preview surface swap method changed")
+    if "Avoid formatting a diagnostic for every surface swap" not in method.group():
+        log = re.compile(r"    new-instance v1, Ljava/lang/StringBuilder;.*?"
+                         r"invoke-static \{v2, v1\}, Landroid/util/Log;->d\(Ljava/lang/String;Ljava/lang/String;\)I", re.S)
+        body, count = log.subn("    # Avoid formatting a diagnostic for every surface swap.", method.group())
+        if count != 1:
+            raise SystemExit("ERROR: preview surface swap diagnostic changed")
+        gl_context.write_text(text[:method.start()] + body + text[method.end():], encoding="utf-8")
+    text = player.read_text(encoding="utf-8")
+    if "previewFrameCount:J" not in text:
+        anchor = ".field private didRender:Z"
+        if text.count(anchor) != 1:
+            raise SystemExit("ERROR: preview player fields changed")
+        text = text.replace(anchor, anchor + "\n\n.field public volatile previewFrameCount:J")
+        # This lambda only formats a debug log on each frame request.
+        log = re.compile(
+            r"    new-instance v0, Lcom/alightcreative/app/motion/scene/ScenePlayer\$renderFrame\$1;"
+            r".*?invoke-static \{p0, v0\}, Lt2/b;->c\(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;\)V", re.S)
+        text, count = log.subn("    # Avoid a per-request diagnostic allocation.", text)
+        if count != 1:
+            raise SystemExit("ERROR: preview frame request log changed")
+        player.write_text(text, encoding="utf-8")
+
+    text = worker.read_text(encoding="utf-8")
+    if "previewFrameCount:J" not in text:
+        trace = ("invoke-virtual {v0}, Lcom/alightcreative/app/motion/persist/a;"
+                 "->getDisableRenderPerformanceTrace()Z\n\n    move-result v6")
+        stats = ("invoke-static {v0, v3}, Lcom/alightcreative/app/motion/scene/SceneKt;"
+                 "->statsForFrame(Lcom/alightcreative/app/motion/scene/Scene;I)"
+                 "Lcom/alightcreative/app/motion/scene/FrameStats;\n\n    move-result-object v0")
+        swap = "invoke-virtual {v0}, Lcom/alightcreative/gl/GLContext;->l0()I"
+        if any(text.count(anchor) != 1 for anchor in (trace, stats, swap)):
+            raise SystemExit("ERROR: live preview render loop changed")
+        text = text.replace(trace, "const/4 v6, 0x1    # Disable per-frame profiling traces.")
+        text = text.replace(stats, "const/4 v0, 0x0    # Statistics were only consumed by profiling.")
+        log = re.compile(
+            r"    iget-object v3, v1, Lcom/alightcreative/app/motion/scene/ScenePlayer\$2;->this\$0:Lcom/alightcreative/app/motion/scene/ScenePlayer;\n\n"
+            r"    new-instance v4, Lcom/alightcreative/app/motion/scene/ScenePlayer\$2\$4;"
+            r".*?invoke-static \{v3, v4\}, Lt2/b;->c\(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;\)V", re.S)
+        text, count = log.subn("    # No debug lambda allocation while polling the preview queue.", text)
+        if count != 1:
+            raise SystemExit("ERROR: preview queue diagnostic changed")
+        hook = ("\n    move-result v3\n    const/16 v4, 0x3000\n"
+                "    if-ne v3, v4, :customfps_swap_done\n\n"
+                "    iget-object v0, v1, Lcom/alightcreative/app/motion/scene/ScenePlayer$2;"
+                "->this$0:Lcom/alightcreative/app/motion/scene/ScenePlayer;\n"
+                "    iget-wide v3, v0, Lcom/alightcreative/app/motion/scene/ScenePlayer;->previewFrameCount:J\n"
+                "    const-wide/16 v10, 0x1\n    add-long/2addr v3, v10\n"
+                "    iput-wide v3, v0, Lcom/alightcreative/app/motion/scene/ScenePlayer;->previewFrameCount:J\n"
+                "    :customfps_swap_done")
+        text = text.replace(swap, swap + hook)
+        worker.write_text(text, encoding="utf-8")
+
+    text = request.read_text(encoding="utf-8")
+    log = re.compile(
+        r"    new-instance v1, Lcom/alightcreative/app/motion/scene/ScenePlayer\$renderFrame\$2\$1;"
+        r".*?invoke-static \{v0, v1\}, Lt2/b;->c\(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;\)V", re.S)
+    text, count = log.subn("    # Pending-frame updates do not need a diagnostic lambda.", text)
+    if count:
+        request.write_text(text, encoding="utf-8")
+    elif "Pending-frame updates do not need" not in text:
+        raise SystemExit("ERROR: pending preview frame diagnostic changed")
+
+    text = editor.read_text(encoding="utf-8")
+    hooks = {
+        "onCreate": ("invoke-virtual {p0, p1}, Landroidx/appcompat/app/c;->setContentView(I)V", "attach"),
+        "onResume": ("invoke-super {p0}, Landroidx/fragment/app/e;->onResume()V", "resume"),
+        "onPause": (".locals 4", "pause"),
+    }
+    for name, (anchor, action) in hooks.items():
+        marker = f"PreviewFpsUi;->{action}"
+        if marker in text:
+            continue
+        method = re.search(r"^\.method protected " + name + r"\([^\n]*\n.*?^\.end method", text, re.M | re.S)
+        if not method or method.group().count(anchor) != 1:
+            raise SystemExit(f"ERROR: editor {name} FPS hook changed")
+        body = method.group().replace(anchor, anchor + "\n    invoke-static {p0}, "
+            f"Lcom/wowmancode/customfx/PreviewFpsUi;->{action}(Landroid/app/Activity;)V")
+        text = text[:method.start()] + body + text[method.end():]
+    editor.write_text(text, encoding="utf-8")
+    print("  Optimized the live preview loop and added optional Preview FPS", file=sys.stderr)
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit(f"Usage: {sys.argv[0]} <patch-dir> <decoded-dir>")
@@ -233,6 +328,7 @@ def main() -> None:
     patch_project_import(decoded)
     patch_effect_number_edit(decoded)
     patch_scene_overlay(decoded)
+    patch_native_preview(decoded)
 
 
 if __name__ == "__main__":

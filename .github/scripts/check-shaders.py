@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Compile each effect's fragment shader the way Alight Motion 3.10.0 does.
+"""Compile and link effect shaders the way Alight Motion 3.10.0 does.
 
 The app prepends a fixed preamble (from l2.j1.d) plus one uniform per
-parameter, then the effect's shader source. A shader that doesn't compile
+parameter, then the effect's shader source. Custom vertex shaders receive
+the native vertex preamble and nontexture parameters. A shader that doesn't compile
 fails at runtime, so this runs the same assembly through glslangValidator.
 
 Usage: check-shaders.py patch/effects/*.xml
@@ -60,12 +61,27 @@ NO_UNIFORM = {"tip", "section"}
 
 PRECISION = {"high": "highp", "low": "lowp"}
 
+VERTEX_PREAMBLE = """#version 100
+attribute vec4 ac_internal_position;
+attribute vec2 ac_internal_texcoord;
+varying vec2 acScreenNorm;
+varying vec2 acLayerNorm;
+uniform mat4 acScreenToLayer;
+void vertShaderInit() {
+    gl_Position = ac_internal_position;
+    acScreenNorm = ac_internal_texcoord;
+    acLayerNorm = (vec4(ac_internal_texcoord, 0.0, 1.0) * acScreenToLayer).xy;
+}
+"""
 
-def assemble(path: Path) -> str:
+
+def assemble(path: Path, stage: str = "fragment") -> str:
     root = ET.parse(path).getroot()
-    shaders = [s for s in root.findall("shader") if s.get("type") == "fragment"]
+    shaders = [s for s in root.findall("shader") if s.get("type") == stage]
+    if stage == "vertex" and not shaders:
+        return VERTEX_PREAMBLE + "void main() { vertShaderInit(); }\n"
     if len(shaders) != 1:
-        raise ValueError(f"expected one fragment shader, found {len(shaders)}")
+        raise ValueError(f"expected one {stage} shader, found {len(shaders)}")
     shader = shaders[0]
 
     uniforms = []
@@ -75,10 +91,13 @@ def assemble(path: Path) -> str:
             continue
         if param.tag not in GLSL_TYPES:
             raise ValueError(f"unknown parameter type <{param.tag}>")
-        uniforms.append(f"uniform {GLSL_TYPES[param.tag]} {param.get('id')};")
+        # AM excludes texture parameters from the vertex stage.
+        if stage != "vertex" or param.tag != "texture":
+            uniforms.append(f"uniform {GLSL_TYPES[param.tag]} {param.get('id')};")
 
     precision = PRECISION.get(shader.get("precision"), "mediump")
-    return (PREAMBLE.replace("{precision}", precision) + "\n" + "\n".join(uniforms)
+    preamble = VERTEX_PREAMBLE if stage == "vertex" else PREAMBLE.replace("{precision}", precision)
+    return (preamble + "\n" + "\n".join(uniforms)
             + "\n\n" + (shader.text or ""))
 
 
@@ -88,15 +107,17 @@ def main() -> None:
         for arg in sys.argv[1:]:
             path = Path(arg)
             try:
-                source = assemble(path)
+                fragment, vertex = assemble(path), assemble(path, "vertex")
             except (ValueError, ET.ParseError) as error:
                 print(f"::error file={path}::{error}")
                 failed = True
                 continue
 
             out = Path(tmp) / (path.stem + ".frag")
-            out.write_text(source)
-            result = subprocess.run(["glslangValidator", "-S", "frag", str(out)],
+            out.write_text(fragment)
+            vert = Path(tmp) / (path.stem + ".vert")
+            vert.write_text(vertex)
+            result = subprocess.run(["glslangValidator", "-l", str(vert), str(out)],
                                     capture_output=True, text=True)
             if result.returncode == 0:
                 print(f"OK    {path.name}")

@@ -62,6 +62,10 @@ void fxPortMain() {
 }
 
 void main() {
+    if (uControl1 <= 0.0) {
+        gl_FragColor = texture2D(inputImg.texture, clamp(acScreenNorm, 0.0, 1.0));
+        return;
+    }
     fxPortMain();
     gl_FragColor = vec4(fxPortOutput.rgb * fxPortOutput.a, fxPortOutput.a);
 }

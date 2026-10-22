@@ -133,7 +133,7 @@ def generate(records):
 
     def renderer(path, size, recipe):
         root = ET.parse(path).getroot()
-        program = ctx.program(vertex_shader=gpu.VERTEX,
+        program = ctx.program(vertex_shader=gpu.vertex_for(path),
                               fragment_shader=gpu.desktop(gpu.CHECK.assemble(path)))
         image = scene.resize((size, size), Image.Resampling.LANCZOS)
         src = np.asarray(image.transpose(Image.Transpose.FLIP_TOP_BOTTOM), dtype="f4") / 255
