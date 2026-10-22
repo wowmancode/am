@@ -20,6 +20,8 @@ pipeline includes the generated effects, updates their integrity signature,
 and verifies their packaged bytes. No additional runtime download is needed.
 Effect names start with **Vegas** or **NewBlue** in the corresponding effect
 categories. Each control supports the app's normal numeric editing and animation.
+Animated applied previews and larger detail images are bundled for these and
+all other custom filters; see [the preview instructions](../previews/README.md).
 
 Mix defaults to 1; all other controls default to 0. Controls keep the source
 range of -2 to 2 and its original nonlinear mappings. Mix is clamped to 0–1

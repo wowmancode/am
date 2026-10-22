@@ -1,0 +1,386 @@
+[
+  {
+    "effect": "blur-edges.xml",
+    "id": "com.wowmancode.effects.bluredges",
+    "name": "Blur Edges",
+    "thumb": "blur_edges.webp",
+    "background": "blur_edges_bg.webp",
+    "source_sha256": "7a3c1729d96e293526940e1c33772bf2b8931eb7cf304469cffaab8dee7018d5",
+    "controls": {},
+    "thumb_sha256": "568120367a434d0448d4a7cf43d608dda35214a49517d23054c7153fb9110ff2",
+    "background_sha256": "c89439ec9d2f3d1eaf412e0da07e595f05780b80c6e5e7963f38bb798b2bb105"
+  },
+  {
+    "effect": "fx-newblue-earthquake.xml",
+    "id": "com.wowmancode.fx.newblue_earthquake",
+    "name": "NewBlue Earthquake",
+    "thumb": "newblue_earthquake.webp",
+    "background": "newblue_earthquake_bg.webp",
+    "source_sha256": "20bff13313aed1e3a8e1ca30a975ea69cb8bc975bb84bf20be6b405ab9a35025",
+    "controls": {},
+    "thumb_sha256": "80fbe1ebf70b31899b7e519dcf50926a5e6ac1ebf77e1e19e9a8f594c19cef25",
+    "background_sha256": "7a05cb71bb7d2c5378f879535b41c58b2a1fd9138a853bfaca98d18564abc8a4"
+  },
+  {
+    "effect": "fx-newblue-wiggle-fun-house.xml",
+    "id": "com.wowmancode.fx.newblue_wiggle_fun_house",
+    "name": "NewBlue Wiggle Fun House",
+    "thumb": "newblue_wiggle_fun_house.webp",
+    "background": "newblue_wiggle_fun_house_bg.webp",
+    "source_sha256": "8a4706e456f942d8adcb20e1ccb573c2902051f24638a3a6e2571f0dddde5948",
+    "controls": {},
+    "thumb_sha256": "a6d34f174251baf4298b04996a578aa80165d8fe1d33b3b0817eac52cdc737e3",
+    "background_sha256": "a1a22d34967c31cdf6f9633ff16491d44283164b90eb84cf9ea1f94f1f362c70"
+  },
+  {
+    "effect": "fx-newblue-wiggle.xml",
+    "id": "com.wowmancode.fx.newblue_wiggle",
+    "name": "NewBlue Wiggle",
+    "thumb": "newblue_wiggle.webp",
+    "background": "newblue_wiggle_bg.webp",
+    "source_sha256": "a60daa647b892ba74d2e742492ac20c71efb3b99a0eed25022b6aea0682ddc22",
+    "controls": {},
+    "thumb_sha256": "b5343b6eabd9b53403c68a97a7c262a79d3bc5ffe621bb01dc3c03c58fbde386",
+    "background_sha256": "5328af18f6ee31d035ae72707b9409300d69837d0a6684374dd7a5d011236336"
+  },
+  {
+    "effect": "fx-vegas-2d-shadow.xml",
+    "id": "com.wowmancode.fx.vegas_2d_shadow",
+    "name": "Vegas 2D Shadow",
+    "thumb": "vegas_2d_shadow.webp",
+    "background": "vegas_2d_shadow_bg.webp",
+    "source_sha256": "1bb41e9b8a4ce82eeb11dda6ff498af5918852b20bfb6f20befb61285eaccc70",
+    "controls": {
+      "uControl2": 0.6,
+      "uControl3": -0.6,
+      "uControl4": -2
+    },
+    "thumb_sha256": "9eb84c7cbaa5fc5895795735310cb60b756cb49633a125d0623168f3e44a82e3",
+    "background_sha256": "4904ef474b6ec9559e1fc6c2f1b738de4c1f8ceaa1e79884c17ea06122c3e1f0"
+  },
+  {
+    "effect": "fx-vegas-border.xml",
+    "id": "com.wowmancode.fx.vegas_border",
+    "name": "Vegas Border",
+    "thumb": "vegas_border.webp",
+    "background": "vegas_border_bg.webp",
+    "source_sha256": "eda8dc4414c089bfb9fbe6b7d7a4f26f1dd23ea1ecb0ac3f97cd74d529b53dc5",
+    "controls": {
+      "uControl2": 0.2,
+      "uControl4": -0.6,
+      "uControl5": -1,
+      "uControl6": -0.2
+    },
+    "thumb_sha256": "4a852682e905cc84a2119ffd0cd748c38d5e840bec32656b9befcea5c7e88202",
+    "background_sha256": "c82829aa4d7b3437944f64f236e90cd015b297dd71723b14a139b350f4c89b06"
+  },
+  {
+    "effect": "fx-vegas-channel-blend.xml",
+    "id": "com.wowmancode.fx.vegas_channel_blend",
+    "name": "Vegas Channel Blend",
+    "thumb": "vegas_channel_blend.webp",
+    "background": "vegas_channel_blend_bg.webp",
+    "source_sha256": "5da3c5b32c1638c27d281fdcac18afe9893e551c43eab66028008d478137784d",
+    "controls": {
+      "uControl2": -1,
+      "uControl4": 1,
+      "uControl6": 1,
+      "uControl7": -1
+    },
+    "thumb_sha256": "5867947e2e29699f9532ca2be2edcae1a74d2e3bdd236cfa8cd3bcc780cd9a17",
+    "background_sha256": "8df845457487e86aa3b838669058e78dcbf7232087b969abc2eebd8dd467fb24"
+  },
+  {
+    "effect": "fx-vegas-color-corrector-secondary.xml",
+    "id": "com.wowmancode.fx.vegas_color_corrector_secondary",
+    "name": "Vegas Color Corrector Secondary",
+    "thumb": "vegas_color_corrector_secondary.webp",
+    "background": "vegas_color_corrector_secondary_bg.webp",
+    "source_sha256": "7404fa5673e84237c9c9e82e064dbd19af7caa546762b1390deb973a8a8d6b10",
+    "controls": {
+      "uControl4": 0.4,
+      "uControl5": 0.3,
+      "uControl7": 0.2
+    },
+    "thumb_sha256": "95a384a989a1b12cd013d60c58ac4572848ea72720e5008d324cde89a9cf87ae",
+    "background_sha256": "d5bbae9d5b5f8e22487b836243ff4f901d0ae728eca217e50fb427d84385921c"
+  },
+  {
+    "effect": "fx-vegas-color-corrector.xml",
+    "id": "com.wowmancode.fx.vegas_color_corrector",
+    "name": "Vegas Color Corrector",
+    "thumb": "vegas_color_corrector.webp",
+    "background": "vegas_color_corrector_bg.webp",
+    "source_sha256": "dddb7a09b28c6b18267fdd9fb2a26a796fde543a4e8e53a0c531447fa04bad46",
+    "controls": {
+      "uControl4": 0.575,
+      "uControl5": 1.3,
+      "uControl8": 0.3
+    },
+    "thumb_sha256": "cbd466470e5a0e7ef919c2d8b3002f156898e7f1f933c0a00fbad7c430e246e0",
+    "background_sha256": "01aaad8fcc0d3f127f3f057b60dc442fad182cc37d09c53e18317f37b0a8a708"
+  },
+  {
+    "effect": "fx-vegas-color-curves.xml",
+    "id": "com.wowmancode.fx.vegas_color_curves",
+    "name": "Vegas Color Curves",
+    "thumb": "vegas_color_curves.webp",
+    "background": "vegas_color_curves_bg.webp",
+    "source_sha256": "85bb436f12068c04f7c35db32c92674f4f3627bedd1e0f193087cec5156230ab",
+    "controls": {
+      "uControl3": -0.25,
+      "uControl8": 1.1
+    },
+    "thumb_sha256": "2cc5d13706c6695e634ed72897c17c8f8169b937c81f991a0dcf4be9f99e694e",
+    "background_sha256": "e56ba16be2ae874027966db8191b08aa9169f39c3244129ac39240ae0a9ad3ba"
+  },
+  {
+    "effect": "fx-vegas-convolution-kernel.xml",
+    "id": "com.wowmancode.fx.vegas_convolution_kernel",
+    "name": "Vegas Convolution Kernel",
+    "thumb": "vegas_convolution_kernel.webp",
+    "background": "vegas_convolution_kernel_bg.webp",
+    "source_sha256": "2107d52f26e64c7785980909033b48587ee37fd29eee57d66eb5bb444ee6de78",
+    "controls": {
+      "uControl2": 2,
+      "uControl3": -0.5,
+      "uControl4": -0.5,
+      "uControl5": -0.5,
+      "uControl6": -0.5
+    },
+    "thumb_sha256": "bcc390f9c65cc2e9d4a899b7b64d2ab98ce55f5f57c81825bd013a532e95d594",
+    "background_sha256": "2f8cbfcf40d9cebb32cbd78333f8e5c75926f440cb70564c9ef0ca8d48a2e8f3"
+  },
+  {
+    "effect": "fx-vegas-deform.xml",
+    "id": "com.wowmancode.fx.vegas_deform",
+    "name": "Vegas Deform",
+    "thumb": "vegas_deform.webp",
+    "background": "vegas_deform_bg.webp",
+    "source_sha256": "122696a32cccef0fa5610b6adefb92887880089ac24debe1e05bf344bba5bf85",
+    "controls": {
+      "uControl3": 1,
+      "uControl4": -0.7,
+      "uControl7": 0.5
+    },
+    "thumb_sha256": "cae7e06f5706e05745c43f09ed1480aa06dd80b66f7d14557b512993b775675f",
+    "background_sha256": "7246b3e5894bf88496a5a38d7532330ef991ac930e2b431935d092b65327c075"
+  },
+  {
+    "effect": "fx-vegas-glow.xml",
+    "id": "com.wowmancode.fx.vegas_glow",
+    "name": "Vegas Glow",
+    "thumb": "vegas_glow.webp",
+    "background": "vegas_glow_bg.webp",
+    "source_sha256": "aca35659bd740e969ab9f5144d2e7e2404a2481418120642c7f4c55a2d3fd534",
+    "controls": {
+      "uControl2": 0.3,
+      "uControl3": 1.2,
+      "uControl4": 0.8
+    },
+    "thumb_sha256": "252b1d2ce026aa7ad9b6624c23539d66690a7985440db6b4c22dc182a7b5a14c",
+    "background_sha256": "f5fe0103fee27300238a43f9b55495969fc5116de748bf26fd33b6e0f994d932"
+  },
+  {
+    "effect": "fx-vegas-height-map.xml",
+    "id": "com.wowmancode.fx.vegas_height_map",
+    "name": "Vegas Height Map",
+    "thumb": "vegas_height_map.webp",
+    "background": "vegas_height_map_bg.webp",
+    "source_sha256": "36369ba758db744e7e89ffaa1c1ddc4522be616d9a757254d0677b5dbfc7e793",
+    "controls": {
+      "uControl2": 0.5,
+      "uControl3": 0.3,
+      "uControl5": -0.7
+    },
+    "thumb_sha256": "9b69de75c06b29702bbebc464cf6a39e9fa83ad49d91f70d49777e5e4f5afcf3",
+    "background_sha256": "0eeacc9fa82697f8f64bbddd5dde762d22922482cb5a77ce40d35a2f46c2d9da"
+  },
+  {
+    "effect": "fx-vegas-hsl-adjust.xml",
+    "id": "com.wowmancode.fx.vegas_hsl_adjust",
+    "name": "Vegas HSL Adjust",
+    "thumb": "vegas_hsl_adjust.webp",
+    "background": "vegas_hsl_adjust_bg.webp",
+    "source_sha256": "3218f43bbf16a4150ef7a723aed67c11dbe6ace0407dc73c1de1bb41eb9e11e4",
+    "controls": {
+      "uControl2": 0.65,
+      "uControl3": 0.3
+    },
+    "thumb_sha256": "0e78684ef217d11c8d3538b9175043db0afa34bb56a7613bfe43b0a7c05eecd8",
+    "background_sha256": "852781801c61ad28b2ee254c6bfbf4ce9093ff1ed6b1c5b4e9a497ed3a1c6f56"
+  },
+  {
+    "effect": "fx-vegas-lab-adjust.xml",
+    "id": "com.wowmancode.fx.vegas_lab_adjust",
+    "name": "Vegas LAB Adjust",
+    "thumb": "vegas_lab_adjust.webp",
+    "background": "vegas_lab_adjust_bg.webp",
+    "source_sha256": "37e083ebabe5f41400bc950d24183b681ec7401fc10c9786eb9d4dd24162f8db",
+    "controls": {
+      "uControl5": 1
+    },
+    "thumb_sha256": "f0ced4fc2e3400e9381dfa70626dfd4a526b650d8a505fc0223ee8bbdf3c8b71",
+    "background_sha256": "8723a2cfd09e50d33514978479b1773222d6995e542a48d8825e2776dd1b177a"
+  },
+  {
+    "effect": "fx-vegas-light-rays.xml",
+    "id": "com.wowmancode.fx.vegas_light_rays",
+    "name": "Vegas Light Rays",
+    "thumb": "vegas_light_rays.webp",
+    "background": "vegas_light_rays_bg.webp",
+    "source_sha256": "9e4595a4d771dc28f09292da78854b68967c0fd92bb550f746b46d7e89b5d97c",
+    "controls": {
+      "uControl2": 1.2,
+      "uControl3": 1,
+      "uControl4": -0.6,
+      "uControl5": 0.6
+    },
+    "thumb_sha256": "3f896d6d73c15462aee593d14a8500085bf830b9745cfaa8f45f659975b611a3",
+    "background_sha256": "cf9730a7b4402af081a94e54c9c3184907a736434a07b645a22b6258178e823d"
+  },
+  {
+    "effect": "fx-vegas-mirror.xml",
+    "id": "com.wowmancode.fx.vegas_mirror",
+    "name": "Vegas Mirror",
+    "thumb": "vegas_mirror.webp",
+    "background": "vegas_mirror_bg.webp",
+    "source_sha256": "390462b4f00e2e291b692bb27cc0f823663d00ccc6159a626f22e64113a95715",
+    "controls": {
+      "uControl2": 0.35,
+      "uControl3": 0.1
+    },
+    "thumb_sha256": "7d963bc15966dd85e43951addf2886313cca9dfad65625f980bc9d1b7e32f736",
+    "background_sha256": "8f132412ed488e75cd9ec91f9e308769e13eba537c7898a104fdcd465618b992"
+  },
+  {
+    "effect": "fx-vegas-pinch-punch.xml",
+    "id": "com.wowmancode.fx.vegas_pinch_punch",
+    "name": "Vegas Pinch Punch",
+    "thumb": "vegas_pinch_punch.webp",
+    "background": "vegas_pinch_punch_bg.webp",
+    "source_sha256": "5eddcf850dfe47ed7e63569a9b58aa846cf767dfcb0c0a328582cbc6d9f08c06",
+    "controls": {
+      "uControl2": 1.7
+    },
+    "thumb_sha256": "acb0a269fc8a38953124000c14914ea7b1303cc6a39f07c410417693387a356d",
+    "background_sha256": "b8f6cd8e26dd62c06bd2feb1e023ee54747f14a95acaaba17e930904aa0372fe"
+  },
+  {
+    "effect": "fx-vegas-radial-blur.xml",
+    "id": "com.wowmancode.fx.vegas_radial_blur",
+    "name": "Vegas Radial Blur",
+    "thumb": "vegas_radial_blur.webp",
+    "background": "vegas_radial_blur_bg.webp",
+    "source_sha256": "0cf35066aeaed1e387d25936cd7d94ec678f7a586595b720c224674338daf8ae",
+    "controls": {
+      "uControl2": 0.8,
+      "uControl3": -0.3
+    },
+    "thumb_sha256": "7b953e7c66a1d69e6509bb23d52deca98ee8d48950966da8441da349c0ed1518",
+    "background_sha256": "d6a63bbd9ca6015069951b1e008e23713166a27553b670eed512410c7740c8c1"
+  },
+  {
+    "effect": "fx-vegas-spherize.xml",
+    "id": "com.wowmancode.fx.vegas_spherize",
+    "name": "Vegas Spherize",
+    "thumb": "vegas_spherize.webp",
+    "background": "vegas_spherize_bg.webp",
+    "source_sha256": "4c075c2d43bd21e99c916913c760f7ec8bfa48b25b4b24c3f2b76945192047d1",
+    "controls": {},
+    "thumb_sha256": "ab3d6f548f6762a208df217c5dbec8a5a8f4e6567ca2948ec4c76b86c654a7c6",
+    "background_sha256": "3597dd1c890eee5ca4120c677d63223b95f7003a879535b25c4708d759f5e0f0"
+  },
+  {
+    "effect": "fx-vegas-starburst.xml",
+    "id": "com.wowmancode.fx.vegas_starburst",
+    "name": "Vegas Starburst",
+    "thumb": "vegas_starburst.webp",
+    "background": "vegas_starburst_bg.webp",
+    "source_sha256": "3b5c14fb168952bc59fa3a65b74e0bffafeb514093f42717f7fec27f88b70320",
+    "controls": {
+      "uControl2": 1.4,
+      "uControl3": 0.2,
+      "uControl4": 1.2,
+      "uControl5": 0.4
+    },
+    "thumb_sha256": "dc93d90a98846e547e46f99652c727a2e0b8f957e656016186bbabfe4bdd8bc4",
+    "background_sha256": "b1417f56853dd7025c2e1736316d3ccb634f7496b521cc912622880f35add6b5"
+  },
+  {
+    "effect": "fx-vegas-swirl.xml",
+    "id": "com.wowmancode.fx.vegas_swirl",
+    "name": "Vegas Swirl",
+    "thumb": "vegas_swirl.webp",
+    "background": "vegas_swirl_bg.webp",
+    "source_sha256": "7c6726fb204151d5a04a03e15ddf9b345e9740a89c82dfb6dad302e6b80fc967",
+    "controls": {
+      "uControl2": 0.6
+    },
+    "thumb_sha256": "c93c7734406f59c9f19eb327f2e350745e53b248c21cad48fd4ebe0029730edb",
+    "background_sha256": "65adf40fef7c6b9733f1c9a8357bbf07a16710d30a474f3e3756b14ed1c813b9"
+  },
+  {
+    "effect": "fx-vegas-unsharp-mask.xml",
+    "id": "com.wowmancode.fx.vegas_unsharp_mask",
+    "name": "Vegas Unsharp Mask",
+    "thumb": "vegas_unsharp_mask.webp",
+    "background": "vegas_unsharp_mask_bg.webp",
+    "source_sha256": "52e8698921f60d36ea54079faa28b642fe96cbc61d21e62d5a26c92234eae91c",
+    "controls": {
+      "uControl2": 1.1,
+      "uControl3": 0.7
+    },
+    "thumb_sha256": "02dd7435469da0827ca7b196e8f50e15ee90126e1fa28fa8c75c4216e8c4d355",
+    "background_sha256": "fb277e279c9e1b85c865f3c7815a9e45937315c653fce99c6eda0a130271679c"
+  },
+  {
+    "effect": "fx-vegas-wave.xml",
+    "id": "com.wowmancode.fx.vegas_wave",
+    "name": "Vegas Wave",
+    "thumb": "vegas_wave.webp",
+    "background": "vegas_wave_bg.webp",
+    "source_sha256": "4649fbab25a578d9e2871ecfda623ce25047823123946401b47463ccaad1c0c9",
+    "controls": {
+      "uControl2": -1,
+      "uControl3": -1.1,
+      "uControl4": -0.5,
+      "uControl5": -0.5
+    },
+    "thumb_sha256": "888373ed1b02eff03992c2b5d0cf81c970e2d372275811b9caee24fb59d72585",
+    "background_sha256": "95f320fc68e78856e0c230b33b5cf737d404524b960a5d5f45544afb799cafc9"
+  },
+  {
+    "effect": "gradient-map.xml",
+    "id": "com.wowmancode.effects.gradientmap",
+    "name": "Gradient Map",
+    "thumb": "gradient_map.webp",
+    "background": "gradient_map_bg.webp",
+    "source_sha256": "58f3d3b9fa9b488aa849a0e6c5420c10cea62d4088b1c3a725154539c1a4ba9f",
+    "controls": {},
+    "thumb_sha256": "c997ed6e4cd7eb0ce03cf174a25793028be37e9269244e78b3c32dda261fd74f",
+    "background_sha256": "bebc8364ba35b1350163d953ad06e673f0aa29b881405e4f88227d487318131c"
+  },
+  {
+    "effect": "invert-flash.xml",
+    "id": "com.wowmancode.effects.invertflash",
+    "name": "Invert Flash",
+    "thumb": "invert_flash.webp",
+    "background": "invert_flash_bg.webp",
+    "source_sha256": "faa1cbb1640af3c99be3ddfa61713061e04414c88f95e18947071b55186f312a",
+    "controls": {},
+    "thumb_sha256": "16162274e908400e78aa9ae6da466c90b1b09d30cd451351049e34fc424a050f",
+    "background_sha256": "43525bf15bea3e4eb1aba1f0ce8f978c165f0784e59244eb43e7489e636e78d9"
+  },
+  {
+    "effect": "tv-simulator.xml",
+    "id": "com.wowmancode.effects.tvsimulator",
+    "name": "TV Simulator",
+    "thumb": "tv_simulator.webp",
+    "background": "tv_simulator_bg.webp",
+    "source_sha256": "a81658f3079b787a09e350dfe2e4dd68402411a6a9e010a93123e7d57c7729d5",
+    "controls": {},
+    "thumb_sha256": "92d0264b4ae21d1a3dd80ffb20848be1f86a2bdeda98ae5b8362fe706749c0e5",
+    "background_sha256": "5322b18e191e6ae37f00fa21fd967cde2e5212e67f928105bbd4efe08dd4bb84"
+  }
+]

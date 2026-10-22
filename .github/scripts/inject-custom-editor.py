@@ -14,15 +14,13 @@ is reassembled. It:
 3. Hooks EffectBrowserActivity.onCreate to add a floating "+ Custom" button
    that opens the editor dialog.
 
-4. Adds a Transitions row under Add Effect in the Effects list.
-
-5. Adds a home-screen Project XML picker which forwards files to the app's
+4. Adds a home-screen Project XML picker which forwards files to the app's
    existing native ImportActivity.
 
-6. Lets effect value labels open a numeric keyboard for slider and spinner
+5. Lets effect value labels open a numeric keyboard for slider and spinner
    controls, using their existing change handlers to persist the value.
 
-7. Uses the empty scene overlay for preview and export, removing the watermark.
+6. Uses the empty scene overlay for preview and export, removing the watermark.
 
 The editor is a dialog over the effect browser rather than its own activity,
 so the manifest does not change. Its HTML page is added to the APK's assets
@@ -39,8 +37,6 @@ from pathlib import Path
 
 LOADER_CLASS = "VisualEffectKt$initVisualEffects$1.smali"
 BROWSER_CLASS = "EffectBrowserActivity.smali"
-EFFECTS_FRAGMENT = "smali/i1/k.smali"
-EFFECTS_ADAPTER = "smali/i1/i.smali"
 EFFECT_PARAMETER_ROW = "smali/i1/k$a$a.smali"
 MAIN_ACTIVITY = "smali_classes4/com/alightcreative/app/motion/activities/main/MainActivity.smali"
 MARKER = "Lcom/wowmancode/customfx/"
@@ -126,32 +122,6 @@ def patch_effect_browser(decoded: Path) -> None:
     method = method[:content.end()] + hook + method[content.end():]
     path.write_text(text[:m.start()] + method + text[m.end():], encoding="utf-8")
     print(f"  Added the Custom button to {path.name}", file=sys.stderr)
-
-
-def patch_transitions_row(decoded: Path) -> None:
-    fragment = decoded / EFFECTS_FRAGMENT
-    adapter = decoded / EFFECTS_ADAPTER
-    if not fragment.is_file() or not adapter.is_file():
-        raise SystemExit("ERROR: Effects list classes are missing")
-
-    text = fragment.read_text(encoding="utf-8")
-    if "TransitionUi;->bind" not in text:
-        anchor = "invoke-super {p0, p1, p2}, Landroidx/fragment/app/Fragment;->onViewCreated(Landroid/view/View;Landroid/os/Bundle;)V"
-        if text.count(anchor) != 1:
-            raise SystemExit("ERROR: Effects fragment onViewCreated hook site changed")
-        text = text.replace(anchor, anchor + "\n    invoke-static {p0}, Lcom/wowmancode/customfx/TransitionUi;->bind(Li1/k;)V")
-        fragment.write_text(text, encoding="utf-8")
-
-    text = adapter.read_text(encoding="utf-8")
-    if "TransitionUi;->wrapAddRow" not in text:
-        anchor = "invoke-direct {v0, p2, p1}, Li1/i$a;-><init>(ILandroid/view/View;)V"
-        if text.count(anchor) != 1:
-            raise SystemExit("ERROR: Effects adapter row creation hook site changed")
-        text = text.replace(anchor,
-            "invoke-static {p1, p2}, Lcom/wowmancode/customfx/TransitionUi;->wrapAddRow(Landroid/view/View;I)Landroid/view/View;\n"
-            "    move-result-object p1\n    " + anchor)
-        adapter.write_text(text, encoding="utf-8")
-    print("  Added the Transitions row to Effects", file=sys.stderr)
 
 
 def patch_project_import(decoded: Path) -> None:
@@ -260,7 +230,6 @@ def main() -> None:
     copy_smali(decoded, patch)
     patch_effect_loader(decoded)
     patch_effect_browser(decoded)
-    patch_transitions_row(decoded)
     patch_project_import(decoded)
     patch_effect_number_edit(decoded)
     patch_scene_overlay(decoded)

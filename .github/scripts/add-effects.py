@@ -123,6 +123,14 @@ def cmd_sig(args: argparse.Namespace) -> None:
 def cmd_build(args: argparse.Namespace) -> None:
     custom = load_custom(Path(args.effects_dir))
 
+    # Browser thumbnails are outside the top-level effect XML integrity hash.
+    if args.previews_dir:
+        previews = sorted(Path(args.previews_dir).glob("*.webp"))
+        if not previews:
+            raise SystemExit("ERROR: no filter previews found")
+        for path in previews:
+            custom[EFFECTS_PREFIX + "thumb/" + path.name] = path.read_bytes()
+
     dex_replacements: dict[str, bytes] = {}
     for spec in args.dex or []:
         name, _, path = spec.partition("=")
@@ -236,6 +244,7 @@ def main() -> None:
     p_build.add_argument("--asset", action="append",
                          help="NAME=PATH: add (or replace) entry NAME, under assets/, with PATH")
     p_build.add_argument("--resources", help="compiled resources.arsc with the app label updated")
+    p_build.add_argument("--previews-dir", help="directory of filter thumbnail WebP assets")
     p_build.set_defaults(func=cmd_build)
 
     args = parser.parse_args()

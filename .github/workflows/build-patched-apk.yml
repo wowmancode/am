@@ -23,6 +23,7 @@ on:
       - "patch/custom-editor/**"
       - "patch/smali/**"
       - "patch/fx/**"
+      - "patch/previews/**"
       - ".github/scripts/**"
       - ".github/workflows/build-patched-apk.yml"
 
@@ -43,6 +44,9 @@ jobs:
 
       - name: Check imported FX filters
         run: python3 .github/scripts/import-fx-filters.py --check
+
+      - name: Check filter previews
+        run: python3 .github/scripts/generate-effect-previews.py --check
 
       # A shader that doesn't compile only fails once the app runs, so
       # compile every custom effect exactly the way the app assembles it.
@@ -183,6 +187,7 @@ jobs:
             custom-unsigned.apk \
             patch/effects \
             "${DEX_ARGS[@]}" \
+            --previews-dir patch/previews/thumb \
             --resources renamed-resources.arsc \
             --asset assets/custom_effects_editor.html=patch/custom-editor/custom_effects_editor.html
 
@@ -341,6 +346,18 @@ jobs:
             exit 1
           fi
           echo "Custom Effects editor page present"
+
+          for PREVIEW in patch/previews/thumb/*.webp; do
+            if ! cmp -s "$PREVIEW" <(unzip -p "$APK" "assets/effects/thumb/$(basename "$PREVIEW")"); then
+              echo "ERROR: filter preview missing or different: $PREVIEW" >&2
+              exit 1
+            fi
+          done
+          if unzip -Z1 "$APK" | grep '^assets/effects/amv-'; then
+            echo "ERROR: AMV transition filters must not be bundled" >&2
+            exit 1
+          fi
+          echo "All filter previews present; no AMV transitions"
 
           echo
           echo "=== NATIVE LIBRARIES ==="
