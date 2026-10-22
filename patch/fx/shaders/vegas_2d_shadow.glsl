@@ -1,0 +1,98 @@
+precision highp float;
+precision highp sampler2D;
+
+uniform sampler2D uTexSampler;
+uniform float uWidth;
+uniform float uHeight;
+uniform float uControl1;
+uniform float uControl2;
+uniform float uControl3;
+uniform float uControl4;
+uniform float uControl5;
+uniform float uControl6;
+uniform float uControl7;
+uniform float uControl8;
+varying vec2 vTexSamplingCoord;
+
+float alphaAt(vec2 pixel, vec2 size, vec2 center, float scale, vec2 rotation) {
+    vec2 p = pixel - 0.5 * size - center;
+    vec2 uv = vec2(dot(p, rotation), dot(p, vec2(-rotation.y, rotation.x))) /
+              (size * scale) + vec2(0.5);
+    if (uv.x < 0.0 || uv.y < 0.0 || uv.x > 1.0 || uv.y > 1.0) return 0.0;
+    return texture2D(uTexSampler, clamp(uv, 0.0, 1.0)).a;
+}
+
+float impulse(float distance, float sigma) {
+    float t = abs(distance) / sigma;
+    float slow = (1.6802999973297119 * cos(0.6317999958992004 * t) +
+                  3.7349998950958252 * sin(0.6317999958992004 * t)) *
+                  exp(-1.7829999923706055 * t);
+    float fast = (-0.6802999973297119 * cos(1.9969999790191650 * t) -
+                  0.2597999870777130 * sin(1.9969999790191650 * t)) *
+                  exp(-1.7230000495910645 * t);
+    return (slow + fast) / (2.50662827463 * sigma);
+}
+
+float intensityAlpha(float alpha, float intensity) {
+    alpha = clamp(alpha, 0.0, 1.0);
+    if (intensity <= 0.0) return alpha;
+    float upper = max(floor(65535.0 * (1.0 - 0.9 * intensity)), 1.0);
+    float increment = floor(65535.0 * 16384.0 / upper);
+    float index = floor(alpha * 65535.0);
+    if (index >= upper) return 1.0;
+    return floor(index * (increment / 16384.0)) / 65535.0;
+}
+
+void main() {
+    vec2 uv = clamp(vTexSamplingCoord, 0.0, 1.0);
+    vec4 source = texture2D(uTexSampler, uv);
+    float strength = clamp(uControl1, 0.0, 1.0);
+    if (strength <= 0.0 || source.a >= 1.0) {
+        gl_FragColor = clamp(source, 0.0, 1.0);
+        return;
+    }
+    vec2 size = vec2(max(uWidth, 1.0), max(uHeight, 1.0));
+    vec2 center = 0.5 * size * vec2(0.05 + 0.25 * uControl2,
+                                   -0.05 + 0.25 * uControl3);
+    float blur = clamp(0.05 * (exp2(uControl4) - 0.25) / 0.75, 0.0, 1.0);
+    float intensity = clamp(uControl5 * 0.5, 0.0, 1.0);
+    float opacity = clamp(1.0 + 0.5 * uControl6, 0.0, 1.0);
+    if (opacity <= 0.0) {
+        gl_FragColor = clamp(source, 0.0, 1.0);
+        return;
+    }
+    float scale = exp2(uControl7);
+    float angle = (uControl8 * 0.5) * 6.283185307179586;
+    vec2 rotation = vec2(cos(angle), sin(angle));
+    vec2 pixel = uv * size;
+    float mask = 0.0;
+    if (blur <= 0.00001) {
+        mask = alphaAt(pixel, size, center, scale, rotation);
+    } else {
+        float radius = blur * max(size.x, size.y);
+        float sigma = max((radius + 1.5) / 3.329042969130445, 0.6);
+        float spacing = max(floor(5.0 * sigma / 32.0), 1.0);
+        for (int row = 0; row < 65; ++row) {
+            float y = (float(row) - 32.0) * spacing;
+            float wy = impulse(y, sigma) * spacing;
+            float horizontal = 0.0;
+            for (int column = 0; column < 65; ++column) {
+                float x = (float(column) - 32.0) * spacing;
+                float wx = impulse(x, sigma) * spacing;
+                horizontal += alphaAt(pixel - vec2(x, y), size,
+                                      center, scale, rotation) * wx;
+            }
+            mask += horizontal * wy;
+        }
+    }
+    float coverage = intensityAlpha(mask, intensity) * opacity;
+    float outputAlpha = source.a + coverage * (1.0 - source.a);
+    vec3 outputRgb = source.rgb;
+    if (outputAlpha > 0.0000001) {
+        outputRgb = source.rgb * source.a / outputAlpha;
+    } else {
+        outputRgb = vec3(0.0);
+    }
+    vec4 result = vec4(outputRgb, outputAlpha);
+    gl_FragColor = clamp(mix(source, result, strength), 0.0, 1.0);
+}
