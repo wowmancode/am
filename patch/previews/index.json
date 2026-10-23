@@ -5,7 +5,7 @@
     "name": "Blur Edges",
     "thumb": "blur_edges.webp",
     "background": "blur_edges_bg.webp",
-    "source_sha256": "6e0bdb2cf863ed7d0600fbdcf4b922a8f0dcb202711378b5cb69f85efe1240ae",
+    "source_sha256": "57bbd9930d494895b18269d9e8f3e0fd8fd055a578a7792b1fdb207e6d899023",
     "controls": {},
     "thumb_sha256": "568120367a434d0448d4a7cf43d608dda35214a49517d23054c7153fb9110ff2",
     "background_sha256": "c89439ec9d2f3d1eaf412e0da07e595f05780b80c6e5e7963f38bb798b2bb105"
@@ -16,7 +16,7 @@
     "name": "NewBlue Earthquake",
     "thumb": "newblue_earthquake.webp",
     "background": "newblue_earthquake_bg.webp",
-    "source_sha256": "6da47d374cd3bc722175a0ab2f585b738f438ea15cb68390ba82adee0bbfa074",
+    "source_sha256": "f07e80e9b3a55fc456f80b734f13ae711061bd626d9b0c0fc08f563b97eb958c",
     "controls": {},
     "thumb_sha256": "80fbe1ebf70b31899b7e519dcf50926a5e6ac1ebf77e1e19e9a8f594c19cef25",
     "background_sha256": "7a05cb71bb7d2c5378f879535b41c58b2a1fd9138a853bfaca98d18564abc8a4"
@@ -27,7 +27,7 @@
     "name": "NewBlue Wiggle Fun House",
     "thumb": "newblue_wiggle_fun_house.webp",
     "background": "newblue_wiggle_fun_house_bg.webp",
-    "source_sha256": "cffc20e0e3583eba2c636ad1570af45f7e5b66d5d36e8a145687a0a6aab68435",
+    "source_sha256": "1ac6c9ed81502dda42af2b3375b83fd9127d80c4a361a86455af95898ce43e5f",
     "controls": {},
     "thumb_sha256": "a6d34f174251baf4298b04996a578aa80165d8fe1d33b3b0817eac52cdc737e3",
     "background_sha256": "a1a22d34967c31cdf6f9633ff16491d44283164b90eb84cf9ea1f94f1f362c70"
@@ -38,7 +38,7 @@
     "name": "NewBlue Wiggle",
     "thumb": "newblue_wiggle.webp",
     "background": "newblue_wiggle_bg.webp",
-    "source_sha256": "c03b2070cb6868b4b48e5e2e96356a8efd0d2c3278f08c11c13bc95f19af0f59",
+    "source_sha256": "9dcf58d3ae71a0b5a0637c6d7625843d77466f7664393d6db7e9f71a3ebe9cd8",
     "controls": {},
     "thumb_sha256": "b5343b6eabd9b53403c68a97a7c262a79d3bc5ffe621bb01dc3c03c58fbde386",
     "background_sha256": "5328af18f6ee31d035ae72707b9409300d69837d0a6684374dd7a5d011236336"
@@ -49,7 +49,7 @@
     "name": "Vegas 2D Shadow",
     "thumb": "vegas_2d_shadow.webp",
     "background": "vegas_2d_shadow_bg.webp",
-    "source_sha256": "6c5b84ef907e7e6e3eef0fd01c5c28c177490c2db89c3f23e8432a1b1ea9802f",
+    "source_sha256": "bf138e61a9c024b4223f66243722431547e7617c67c03918504b7c02882dee53",
     "controls": {
       "uControl2": 0.6,
       "uControl3": -0.6,
@@ -64,7 +64,7 @@
     "name": "Vegas Border",
     "thumb": "vegas_border.webp",
     "background": "vegas_border_bg.webp",
-    "source_sha256": "42238ac88e253f90ec255d27180de016a3e71a8201862291e58786e385a0e1a2",
+    "source_sha256": "5ef57343f5ff53dae5febfbf00cbc6d34deb88a4a7ca9d0a7d3a43a82eb3523e",
     "controls": {
       "uControl2": 0.2,
       "uControl4": -0.6,
@@ -80,7 +80,7 @@
     "name": "Vegas Channel Blend",
     "thumb": "vegas_channel_blend.webp",
     "background": "vegas_channel_blend_bg.webp",
-    "source_sha256": "fa700e9c41a1fe2268d31c1ca857541d96138ab6b70dffa525d00ec06be0b55e",
+    "source_sha256": "2a870f8306e70a30aa53a7a08819c8df55c76d845d922daba95f900c6651792c",
     "controls": {
       "uControl2": -1,
       "uControl4": 1,
@@ -96,7 +96,7 @@
     "name": "Vegas Color Corrector Secondary",
     "thumb": "vegas_color_corrector_secondary.webp",
     "background": "vegas_color_corrector_secondary_bg.webp",
-    "source_sha256": "2eaa22dbfe5a7f14f59f8a7328ec8b71e56be4d139a49b1d031233821e9a05d9",
+    "source_sha256": "9b3cd5ddce9f187d7588e50f49dde520d353d7e3a48d0121d8c3aba4a78dea4a",
     "controls": {
       "uControl4": 0.4,
       "uControl5": 0.3,
@@ -111,7 +111,7 @@
     "name": "Vegas Color Corrector",
     "thumb": "vegas_color_corrector.webp",
     "background": "vegas_color_corrector_bg.webp",
-    "source_sha256": "be570759708c3c687a5600170e53f9021b051151a563c5fb9206f2caff18c261",
+    "source_sha256": "d5ad81e0672b832f21e69e8a9548750aae61af06822425a2e4695998005cc5b3",
     "controls": {
       "uControl4": 0.575,
       "uControl5": 1.3,
@@ -126,7 +126,7 @@
     "name": "Vegas Color Curves",
     "thumb": "vegas_color_curves.webp",
     "background": "vegas_color_curves_bg.webp",
-    "source_sha256": "85ce89ed9cf3cd05facc4f9d457ed42c596e28e1462fd7217f922ccfef03d093",
+    "source_sha256": "351ef9216b504f6f116683d8682448d94961a7f63eff98f1e4b90d1a39ecfaf8",
     "controls": {
       "uControl3": -0.25,
       "uControl8": 1.1
@@ -140,7 +140,7 @@
     "name": "Vegas Convolution Kernel",
     "thumb": "vegas_convolution_kernel.webp",
     "background": "vegas_convolution_kernel_bg.webp",
-    "source_sha256": "add4b5527983a0573ac69a2cdd85f11b55ee790d086474031b7b127129abb94f",
+    "source_sha256": "0291893fb0c29275054c91e0c082be78417c0f9251119402274a4f769988899b",
     "controls": {
       "uControl2": 2,
       "uControl3": -0.5,
@@ -157,7 +157,7 @@
     "name": "Vegas Deform",
     "thumb": "vegas_deform.webp",
     "background": "vegas_deform_bg.webp",
-    "source_sha256": "17ecc4dba522e83e62d42752a3aa40a5cea6b7dd2b8f191dea6f8b7552c9961b",
+    "source_sha256": "50c6ce196967d2da0843d2ef6752e5111669253f239d03593c0d81a955d61b5f",
     "controls": {
       "uControl3": 1,
       "uControl4": -0.7,
@@ -172,7 +172,7 @@
     "name": "Vegas Glow",
     "thumb": "vegas_glow.webp",
     "background": "vegas_glow_bg.webp",
-    "source_sha256": "c1de207d2378cfade4b0ac61ba2de90fd440e04c79f8acaf2d488d293ce09617",
+    "source_sha256": "5ed3f003881d344fc44f35139ec45b7df9003c6b04f26840a17c9f730506150b",
     "controls": {
       "uControl2": 0.3,
       "uControl3": 1.2,
@@ -187,7 +187,7 @@
     "name": "Vegas Height Map",
     "thumb": "vegas_height_map.webp",
     "background": "vegas_height_map_bg.webp",
-    "source_sha256": "85ceaeb2fb9934206c155e16db19a9bf2e4cf0916464173689ba3a0526c054a8",
+    "source_sha256": "dd550615e80e8d57515082ade5e280c5e19000014ccea1549f1e72f4b0c5af0d",
     "controls": {
       "uControl2": 0.5,
       "uControl3": 0.3,
@@ -202,7 +202,7 @@
     "name": "Vegas HSL Adjust",
     "thumb": "vegas_hsl_adjust.webp",
     "background": "vegas_hsl_adjust_bg.webp",
-    "source_sha256": "e2f35e2501d51cbbcffa8de571bed8f956c3b9be4db9c817970c58096955ad78",
+    "source_sha256": "2aea6214a07ebc27f6f8ab3430b4ccf578e6ee729d89712857f701f36f541506",
     "controls": {
       "uControl2": 0.65,
       "uControl3": 0.3
@@ -216,7 +216,7 @@
     "name": "Vegas LAB Adjust",
     "thumb": "vegas_lab_adjust.webp",
     "background": "vegas_lab_adjust_bg.webp",
-    "source_sha256": "a9efdf7c514bf52f2781e64a142e70f2c2bdefa0599b747ad74a03458e2ee0e5",
+    "source_sha256": "0df393dae077556a7fd28bdd35572970015c9e47193bf72b5684ae787f96e715",
     "controls": {
       "uControl5": 1
     },
@@ -229,7 +229,7 @@
     "name": "Vegas Light Rays",
     "thumb": "vegas_light_rays.webp",
     "background": "vegas_light_rays_bg.webp",
-    "source_sha256": "3f063fcd8c7e5b2ce410f5f05592aa4a5777098082b9deafb771204ffe3e9a35",
+    "source_sha256": "67570f7f77f2d3955e8e0bacedea928b9d63b68aaedf65d2bc24d75e5667f347",
     "controls": {
       "uControl2": 1.2,
       "uControl3": 1,
@@ -245,7 +245,7 @@
     "name": "Vegas Mirror",
     "thumb": "vegas_mirror.webp",
     "background": "vegas_mirror_bg.webp",
-    "source_sha256": "644a059e6b0848d27244897da04b52863dbd5c2f14db72501a00863d7dd97be1",
+    "source_sha256": "9daba3b6609b69efb9ff690b8a4bf87c1ece9fdb5dae5001d5f638c9c8737208",
     "controls": {
       "uControl2": 0.35,
       "uControl3": 0.1
@@ -259,7 +259,7 @@
     "name": "Vegas Pinch Punch",
     "thumb": "vegas_pinch_punch.webp",
     "background": "vegas_pinch_punch_bg.webp",
-    "source_sha256": "02dd60f324c556a07e678da7a876d4f7728140cedfe543b820e01682084bf41a",
+    "source_sha256": "8899a3d051873083494fd01dc5807896110ab1369bbd0a06ae14948ac8c2a311",
     "controls": {
       "uControl2": 1.7
     },
@@ -272,7 +272,7 @@
     "name": "Vegas Radial Blur",
     "thumb": "vegas_radial_blur.webp",
     "background": "vegas_radial_blur_bg.webp",
-    "source_sha256": "458dc6373207e16f4d7ba77ea346f698adc5755622f41e1bb6c3461487f077ef",
+    "source_sha256": "20a40280ac4b9424f37ebc0d5febf27219a31ac28ab1d9b566321c0227cbf707",
     "controls": {
       "uControl2": 0.8,
       "uControl3": -0.3
@@ -286,7 +286,7 @@
     "name": "Vegas Spherize",
     "thumb": "vegas_spherize.webp",
     "background": "vegas_spherize_bg.webp",
-    "source_sha256": "c3a9560b65053d76fd462732a346028285f1f9786a98ba0023abc9c151f012f0",
+    "source_sha256": "d83be0334c16ce084e876755f76738612cd101ee90bafba1ec4a3b40394cdf2f",
     "controls": {},
     "thumb_sha256": "ab3d6f548f6762a208df217c5dbec8a5a8f4e6567ca2948ec4c76b86c654a7c6",
     "background_sha256": "3597dd1c890eee5ca4120c677d63223b95f7003a879535b25c4708d759f5e0f0"
@@ -297,7 +297,7 @@
     "name": "Vegas Starburst",
     "thumb": "vegas_starburst.webp",
     "background": "vegas_starburst_bg.webp",
-    "source_sha256": "858cbd1f18e54fa8a035aaf1a738f6dfebd80d4ac49395ccbcbe134cc6aecd2c",
+    "source_sha256": "55424de58deb06ab5b2309db781771aa694cf5e408d78bd928fe0fc6138c01e7",
     "controls": {
       "uControl2": 1.4,
       "uControl3": 0.2,
@@ -313,7 +313,7 @@
     "name": "Vegas Swirl",
     "thumb": "vegas_swirl.webp",
     "background": "vegas_swirl_bg.webp",
-    "source_sha256": "cb5e87030d29442be23fcb07681fbaf02ddcb9518a2fc1c540a091ce7de60475",
+    "source_sha256": "2636b94566cac835d4f3a62dd875a975d08cc6ac8bc5f9473e479fafd790b19e",
     "controls": {
       "uControl2": 0.6
     },
@@ -326,7 +326,7 @@
     "name": "Vegas Unsharp Mask",
     "thumb": "vegas_unsharp_mask.webp",
     "background": "vegas_unsharp_mask_bg.webp",
-    "source_sha256": "07daa3a2f62e81f6f19fc89a08d5175d44dfc9f0693d1ae943fd062a96e13291",
+    "source_sha256": "cb93d95dc5720a4403d2559e5d9b8223cafcae1c36fcd42cf31509b6518a7f16",
     "controls": {
       "uControl2": 1.1,
       "uControl3": 0.7
@@ -340,7 +340,7 @@
     "name": "Vegas Wave",
     "thumb": "vegas_wave.webp",
     "background": "vegas_wave_bg.webp",
-    "source_sha256": "201e144a96c4bd53b6ed11f151d8d62b3ee7cff998484d150cba33ba06d6499e",
+    "source_sha256": "8dfeb363bd7dfa682f3ee312cda7fa8ec970a9b284a49fd72c22b1cde3364d52",
     "controls": {
       "uControl2": -1,
       "uControl3": -1.1,
@@ -356,7 +356,7 @@
     "name": "Gradient Map",
     "thumb": "gradient_map.webp",
     "background": "gradient_map_bg.webp",
-    "source_sha256": "6e7e847ee5e385cbffcb6f4f4a00087f2a0abf4d0489d0c1bf4ceab573534068",
+    "source_sha256": "ea6efcaeb0dc11ddd8c879d71babb64c234a356fa92b8dbdf927c8a3c4a0d67d",
     "controls": {},
     "thumb_sha256": "c997ed6e4cd7eb0ce03cf174a25793028be37e9269244e78b3c32dda261fd74f",
     "background_sha256": "bebc8364ba35b1350163d953ad06e673f0aa29b881405e4f88227d487318131c"
@@ -367,7 +367,7 @@
     "name": "Invert Flash",
     "thumb": "invert_flash.webp",
     "background": "invert_flash_bg.webp",
-    "source_sha256": "759f0631aa3a1630962814bf2e28e26cece450e169425aaa23200c0f610a12e7",
+    "source_sha256": "42ef4b369ca97832705b170cffbe6d90938d19a2ef5e2885181dbd842c220f65",
     "controls": {},
     "thumb_sha256": "16162274e908400e78aa9ae6da466c90b1b09d30cd451351049e34fc424a050f",
     "background_sha256": "43525bf15bea3e4eb1aba1f0ce8f978c165f0784e59244eb43e7489e636e78d9"
@@ -378,7 +378,7 @@
     "name": "TV Simulator",
     "thumb": "tv_simulator.webp",
     "background": "tv_simulator_bg.webp",
-    "source_sha256": "0acc649e5d6dd35129d870039fca2c00326bd869cecfcb3b43326836594927ec",
+    "source_sha256": "a7ea8b6f82f198b2d62d337ef83ab696f4129125de7d3c0bbc06059da7246296",
     "controls": {},
     "thumb_sha256": "92d0264b4ae21d1a3dd80ffb20848be1f86a2bdeda98ae5b8362fe706749c0e5",
     "background_sha256": "5322b18e191e6ae37f00fa21fd967cde2e5212e67f928105bbd4efe08dd4bb84"

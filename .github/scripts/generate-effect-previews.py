@@ -24,7 +24,8 @@ def digest(data):
 
 def inputs():
     presets = json.loads((LIBRARY / "settings.json").read_text())
-    effects = sorted((ROOT / "patch/effects").glob("*.xml"))
+    effects = [path for path in sorted((ROOT / "patch/effects").glob("*.xml"))
+               if ET.parse(path).getroot().get("internal") != "true"]
     if set(presets) != {path.name for path in effects}:
         raise ValueError("preview settings must cover every bundled filter exactly once")
     if any(path.name.startswith("amv-") for path in effects):

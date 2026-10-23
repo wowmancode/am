@@ -28,6 +28,9 @@ is reassembled. It:
 8. Drains available video encoder output without stalling each frame, while
    preserving the blocking end-of-stream drain, and removes export profiling.
 
+9. Adds project-backed XYZ controls and perspective projection to the native
+   Move & Transform panel, including its dial, trackpad, and keyframe bindings.
+
 The editor is a dialog over the effect browser rather than its own activity,
 so the manifest does not change. Its HTML page is added to the APK's assets
 by add-effects.py.
@@ -402,6 +405,8 @@ def main() -> None:
     patch_scene_overlay(decoded)
     patch_native_preview(decoded)
     patch_export_rendering(decoded)
+    subprocess.run([sys.executable, str(Path(__file__).with_name("inject-transform3d.py")),
+                    str(decoded)], check=True, stdout=sys.stderr)
     subprocess.run([sys.executable, str(Path(__file__).with_name("check-export-drain.py")),
                     str(decoded)], check=True, stdout=sys.stderr)
 

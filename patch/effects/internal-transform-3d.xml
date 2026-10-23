@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<effect id="com.wowmancode.internal.transform3d" name="@string/name" desc="@string/desc" category="transform" tags="transform,raster,3d" internal="true" overdraw="true" maxOverdraw="0.2">
+    <strings><locale lang="en">
+        <string name="name">3D Layer Transform</string>
+        <string name="desc">Perspective depth and X/Y tilt controlled from Move &amp; Transform.</string>
+        <string name="depth">Position Z</string>
+        <string name="rotateX">Rotation X</string>
+        <string name="rotateY">Rotation Y</string>
+    </locale></strings>
+    <params>
+        <texture id="inputImg" srcType="content" />
+        <spinner id="depth" default="0.0" min="-100000" max="100000" step="1" label="@string/depth" />
+        <spinner id="rotateX" default="0.0" min="-100000" max="100000" step="0.1" type="angle" label="@string/rotateX" />
+        <spinner id="rotateY" default="0.0" min="-100000" max="100000" step="0.1" type="angle" label="@string/rotateY" />
+    </params>
+    <shader type="vertex"><![CDATA[
+precision highp float;
+varying highp vec3 planeX;
+varying highp vec3 planeY;
+varying highp vec3 planeNormal;
+void main() {
+    vertShaderInit();
+    vec2 angle = mod(vec2(rotateX, rotateY), 360.0) * 0.0174532925199433;
+    float sx = sin(angle.x), cx = cos(angle.x);
+    float sy = sin(angle.y), cy = cos(angle.y);
+    planeX = vec3(cy, 0.0, -sy);
+    planeY = vec3(sy * sx, cx, cy * sx);
+    planeNormal = vec3(sy * cx, -sx, cy * cx);
+}
+    ]]></shader>
+    <shader type="fragment" precision="high"><![CDATA[
+varying highp vec3 planeX;
+varying highp vec3 planeY;
+varying highp vec3 planeNormal;
+void main() {
+    if (depth == 0.0 && rotateX == 0.0 && rotateY == 0.0) {
+        gl_FragColor = texture2D(inputImg.texture, acScreenNorm);
+        return;
+    }
+    // Inverse-project a two-sided layer plane. The camera distance is in
+    // layer units, independent of preview/export framebuffer resolution.
+    const float focal = 1000.0;
+    vec2 size = max(abs(acLayerSize), vec2(0.0001));
+    vec2 pivot = vec2(0.5) + acLayerPivot / size * vec2(1.0, -1.0);
+    vec2 pixel = (acLayerNorm - pivot) * size * vec2(1.0, -1.0);
+    vec3 ray = vec3(pixel, focal);
+    float denominator = dot(planeNormal, ray);
+    if (abs(denominator) < 0.00001) { gl_FragColor = vec4(0.0); return; }
+    float distance = planeNormal.z * (focal + depth) / denominator;
+    if (distance <= 0.00001) { gl_FragColor = vec4(0.0); return; }
+    vec3 hit = vec3(distance * pixel, distance * focal - focal - depth);
+    vec2 local = vec2(dot(hit, planeX), dot(hit, planeY));
+    vec2 layer = local / size * vec2(1.0, -1.0) + pivot;
+    vec2 sampleUv = (vec4(layer, 0.0, 1.0) * acLayerToScreen).xy;
+    if (sampleUv.x < 0.0 || sampleUv.y < 0.0 || sampleUv.x > 1.0 || sampleUv.y > 1.0) {
+        gl_FragColor = vec4(0.0);
+        return;
+    }
+    gl_FragColor = texture2D(inputImg.texture, sampleUv);
+}
+    ]]></shader>
+</effect>
