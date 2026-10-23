@@ -39,10 +39,13 @@ public final class Transform3dUi {
     public static void attach(i1.z fragment) {
         if (state(fragment) != null || !(fragment.getView() instanceof ViewGroup)) return;
         ViewGroup root = (ViewGroup) fragment.getView();
-        State state = new State(fragment, root);
+        View anchor = root.findViewById(X);
+        if (anchor == null || !(anchor.getParent() instanceof ViewGroup)) return;
+        ViewGroup panel = (ViewGroup) anchor.getParent();
+        State state = new State(fragment, panel);
         state.overlay.setId(STATE);
         state.overlay.setTag(state);
-        root.addView(state.overlay, new ViewGroup.LayoutParams(-1, -1));
+        panel.addView(state.overlay, new ViewGroup.LayoutParams(-1, -1));
         refresh(fragment);
     }
     public static void refresh(i1.z fragment) {
