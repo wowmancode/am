@@ -31,6 +31,19 @@ void main() {
 }
 """
 
+SAMPLING_CASES = {
+    "vegas_glow": [[1, 0, 0, 0, 0, 0, 0], [1, 1, 1, 0, 0, 0, 0],
+                   [1, 2, 2, 2, -2, 1, 2], [0.35, 0.5, 0.25, 1, 0, 0, 0],
+                   [1, 2, -2, 0, 0, 0, 0]],
+    "vegas_light_rays": [[1, 0, 0, 0, 0, 0, 0, 0], [1, 2, 2, 2, -2, -2, -2, 2],
+                         [1, 2, -2, 0, 0, 2, 2, 2], [1, 0, 0, 0, 0, 0, 0, -2],
+                         [0.35, 1, 1, -2, 2, 0.5, -0.5, 1]],
+    "vegas_radial_blur": [[1, -2, 0, 0, 0], [1, 2, 2, -2, 0],
+                          [1, 2, -2, 2, 1], [0.35, 0.5, 0, 0, 1], [1, 0, 0, 0, 0]],
+    "vegas_unsharp_mask": [[1, 2, 2, 0], [1, -2, 1, 0.5], [1, 1, 1, 2],
+                           [0.35, 0.75, 0.5, 0.1], [1, 0, 0, 0]],
+}
+
 
 def desktop(source):
     source = re.sub(r"^#version[^\n]*\n", "", source)
@@ -101,6 +114,14 @@ def main():
     manifest = json.loads((ROOT / "patch/fx/manifest.json").read_text())
     total = 0
     worst = 0.0
+
+    def fragment_reference(raw, entry):
+        source, names = PORT.convert(raw, entry["controls"])
+        return ctx.program(vertex_shader=VERTEX, fragment_shader=desktop(
+            CHECK.PREAMBLE.replace("{precision}", "highp") +
+            "\nuniform AC_ImageInfo inputImg;\n" +
+            "\n".join(f"uniform float {name};" for name in names) + "\n" + source))
+
     for entry in manifest["filters"]:
         stem = Path(entry["source"]).stem
         raw = (ROOT / "patch/fx/shaders" / entry["source"]).read_text()
@@ -130,11 +151,7 @@ def main():
             # Compare against the original fragment-only host adaptation:
             # host-local time arithmetic at exact frame boundaries must be
             # preserved, including float32 rounding of (time - startTime).
-            baseline_source, names = PORT.convert(raw, entry["controls"])
-            baseline = ctx.program(vertex_shader=VERTEX, fragment_shader=desktop(
-                CHECK.PREAMBLE.replace("{precision}", "highp") +
-                "\nuniform AC_ImageInfo inputImg;\n" +
-                "\n".join(f"uniform float {name};" for name in names) + "\n" + baseline_source))
+            baseline = fragment_reference(raw, entry)
             for time in (0.0, 1 / 30, 10.125, 4096 / 30, 140.0):
                 for controls in (cases["defaults"], cases["adjusted"],
                                  [1, 2, -2], [1, -2, 2]):
@@ -144,6 +161,22 @@ def main():
                     assert np.all(np.isfinite(actual)) and delta <= 1 / 255, (stem, time, controls, delta)
                     error = max(error, delta)
                     total += 1
+            baseline.release()
+        if stem in SAMPLING_CASES:
+            baseline = fragment_reference(raw, entry)
+            for filtering in (moderngl.NEAREST, moderngl.LINEAR):
+                texture.filter = (filtering, filtering)
+                for image in (gradient, checker, cutout):
+                    premultiplied = image.copy()
+                    premultiplied[..., :3] *= premultiplied[..., 3:4]
+                    for controls in SAMPLING_CASES[stem]:
+                        expected = render(baseline, premultiplied, controls)
+                        actual = render(port, premultiplied, controls)
+                        delta = float(np.max(np.abs(actual - expected)))
+                        assert np.all(np.isfinite(actual)) and delta <= 1 / 255, (stem, filtering, controls, delta)
+                        error = max(error, delta)
+                        total += 1
+            texture.filter = (moderngl.NEAREST, moderngl.NEAREST)
             baseline.release()
         reference.release()
         port.release()

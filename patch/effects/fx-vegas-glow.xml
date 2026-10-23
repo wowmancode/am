@@ -39,6 +39,7 @@ void fxPortMain() {
     float radius = clamp((exp2(uControl2) - 1.0) / 3.0, 0.0, 1.0);
     float intensity = clamp(20.0 * (exp2(uControl3) - 1.0) / 3.0,
                             0.0, 20.0);
+    if (intensity <= 0.0) { fxPortOutput = original; return; }
     float suppression = clamp(0.5 * uControl4, 0.0, 1.0);
     float widthPx = max(acScreenSize.x, 1.0);
     float heightPx = max(acScreenSize.y, 1.0);

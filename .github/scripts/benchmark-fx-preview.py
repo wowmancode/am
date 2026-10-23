@@ -34,7 +34,15 @@ def main():
     target.use()
     manifest = json.loads((GPU.ROOT / "patch/fx/manifest.json").read_text())
     print(f"{ctx.info['GL_RENDERER']}; {width}x{height}; median of five draws")
-    for name in ("newblue_earthquake.glsl", "vegas_2d_shadow.glsl"):
+    scenarios = [("newblue_earthquake.glsl", "motion history", {}),
+                 ("vegas_2d_shadow.glsl", "blur", {}),
+                 ("vegas_glow.glsl", "zero intensity", {}),
+                 ("vegas_glow.glsl", "active", {"uControl2": 1, "uControl3": 1}),
+                 ("vegas_light_rays.glsl", "default radius", {}),
+                 ("vegas_light_rays.glsl", "wide radius", {"uControl6": 2, "uControl7": 2}),
+                 ("vegas_radial_blur.glsl", "radial", {}),
+                 ("vegas_unsharp_mask.glsl", "active", {"uControl2": 1, "uControl3": 1})]
+    for name, label, controls_override in scenarios:
         entry = next(e for e in manifest["filters"] if e["source"] == name)
         raw = (GPU.ROOT / "patch/fx/shaders" / name).read_text()
         old, controls = GPU.PORT.convert(raw, entry["controls"])
@@ -50,6 +58,7 @@ def main():
             values = {"inputImg.texture": 0, "acScreenSize": (width, height),
                       "acTime": 10.125, "acStartTime": 0}
             values.update({name: 1 if name == "uControl1" else 0 for name in controls})
+            values.update(controls_override)
             for name, value in values.items():
                 if name in program:
                     program[name].value = value
@@ -65,7 +74,7 @@ def main():
             times.append(statistics.median(samples))
             vao.release()
             program.release()
-        print(f"{path.stem}: {times[0]:.3f} ms -> {times[1]:.3f} ms ({times[0] / times[1]:.2f}x)")
+        print(f"{path.stem} ({label}): {times[0]:.3f} ms -> {times[1]:.3f} ms ({times[0] / times[1]:.2f}x)", flush=True)
     target.release()
     texture.release()
     ctx.release()

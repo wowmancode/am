@@ -46,16 +46,19 @@ void fxPortMain() {
     float threshold = 1.0 - sensitivity;
     float power = clamp(0.6 + 0.2 * uControl2, 0.0, 1.5);
     float blend = clamp(0.5 + 0.25 * uControl8, 0.0, 1.0);
+    if (blend <= 0.0 || power <= 0.0) { fxPortOutput = original; return; }
     vec4 rays = vec4(0.0);
     for (int i = 0; i < 12; ++i) {
         float t = float(i) / 12.0;
         vec2 p = mix(uv, light, t);
-        vec4 sampleColor = fxPortSample(inputImg.texture, clamp(p, 0.0, 1.0));
+        float bound = clamp(1.0 - length((p - light) / radius), 0.0, 1.0);
+        if (bound > 0.0) {
+        vec4 sampleColor = i == 0 ? original : fxPortSample(inputImg.texture, clamp(p, 0.0, 1.0));
         float level = max(max(sampleColor.r, sampleColor.g), sampleColor.b);
         float bright = max(level - threshold, 0.0) /
                        max(1.0 - threshold, 0.0001);
-        float bound = clamp(1.0 - length((p - light) / radius), 0.0, 1.0);
         rays += sampleColor * bright * bound * (1.0 - 0.5 * t);
+        }
     }
     vec4 glow = clamp(rays * (power / 12.0), 0.0, 1.0);
     vec4 lit = 1.0 - (1.0 - original) * (1.0 - glow);

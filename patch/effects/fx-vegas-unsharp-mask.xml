@@ -49,7 +49,8 @@ void fxPortMain() {
             float ax = abs(float(x));
             float wx = ax < 0.5 ? 6.0 : (ax < 1.5 ? 4.0 : 1.0);
             vec2 tapUv = clamp(uv + vec2(float(x), float(y)) * sampleStep, 0.0, 1.0);
-            blur += wx * wy * fxPortSample(inputImg.texture, tapUv);
+            vec4 sampleColor = (x == 0 && y == 0) ? original : fxPortSample(inputImg.texture, tapUv);
+            blur += wx * wy * sampleColor;
         }
     }
     blur *= 1.0 / 256.0;

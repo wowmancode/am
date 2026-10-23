@@ -25,6 +25,9 @@ is reassembled. It:
 7. Removes diagnostic work from the live preview loop and adds an optional
    per-player Preview FPS button in the editor.
 
+8. Drains available video encoder output without stalling each frame, while
+   preserving the blocking end-of-stream drain, and removes export profiling.
+
 The editor is a dialog over the effect browser rather than its own activity,
 so the manifest does not change. Its HTML page is added to the APK's assets
 by add-effects.py.
@@ -35,6 +38,7 @@ Usage:
 
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -312,6 +316,74 @@ def patch_native_preview(decoded: Path) -> None:
     print("  Optimized the live preview loop and added optional Preview FPS", file=sys.stderr)
 
 
+def patch_export_rendering(decoded: Path) -> None:
+    codec = find_one(decoded, "MediaCodecExportContext.smali")
+    exporter = find_one(decoded, "SceneExporter.smali")
+    text = codec.read_text(encoding="utf-8")
+    if "export_drain_timeout_ready" not in text:
+        method = re.search(r"^\.method private final drainEncoder\(Z\)V\n.*?^\.end method", text, re.M | re.S)
+        anchor = ("const-wide/16 v4, 0x2710\n\n"
+                  "    invoke-virtual {v2, v3, v4, v5}, Landroid/media/MediaCodec;"
+                  "->dequeueOutputBuffer(Landroid/media/MediaCodec$BufferInfo;J)I")
+        if not method or method.group().count(anchor) != 1:
+            raise SystemExit("ERROR: video encoder drain timeout changed")
+        # Drain every ready buffer before submitting another frame. Waiting
+        # for future output here serializes GPU rendering and encoding. EOS
+        # still waits/retries until the encoder emits its final flagged buffer.
+        body = method.group().replace(anchor,
+            "const-wide/16 v4, 0x0\n"
+            "    if-eqz p1, :export_drain_timeout_ready\n"
+            "    const-wide/16 v4, 0x2710\n"
+            "    :export_drain_timeout_ready\n\n" + anchor.split("\n\n", 1)[1])
+        text = text[:method.start()] + body + text[method.end():]
+        # These callbacks only format diagnostic strings. Leave format-change,
+        # warning, failure, end-of-stream, and buffer/muxer handling untouched.
+        for suffix, register, level in (("beginFrame$1", "v0", "c"),
+                                        ("drainEncoder$1", "v0", "h"),
+                                        ("drainEncoder$3", "v3", "h"),
+                                        ("drainEncoder$8", "v3", "h")):
+            cls = "Lcom/alightcreative/app/motion/scene/MediaCodecExportContext$" + suffix + ";"
+            pattern = re.compile(r"    new-instance " + register + ", " + re.escape(cls) +
+                r".*?invoke-static \{p0, " + register + r"\}, Lt2/b;->" + level +
+                r"\(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;\)V", re.S)
+            text, count = pattern.subn("    # Avoid a per-frame encoder diagnostic allocation.", text)
+            if count != 1:
+                raise SystemExit(f"ERROR: encoder diagnostic changed: {suffix}")
+        codec.write_text(text, encoding="utf-8")
+
+    text = exporter.read_text(encoding="utf-8")
+    if "Export frames do not need a profiling trace" not in text:
+        method = re.search(r"^\.method private final renderFrame\([^\n]*\n.*?^\.end method", text, re.M | re.S)
+        if not method:
+            raise SystemExit("ERROR: export renderFrame changed")
+        pattern = re.compile(r"    invoke-static \{\}, Lcom/google/firebase/perf/c;->c\(\)Lcom/google/firebase/perf/c;"
+            r".*?invoke-virtual \{v1\}, Lcom/google/firebase/perf/metrics/Trace;->start\(\)V", re.S)
+        body, count = pattern.subn("    # Export frames do not need a profiling trace.", method.group())
+        stop = "invoke-virtual {v1}, Lcom/google/firebase/perf/metrics/Trace;->stop()V"
+        if count != 1 or body.count(stop) != 1:
+            raise SystemExit("ERROR: per-frame export profiling changed")
+        body = body.replace(stop, "# No per-frame export profiling to stop.")
+        exporter.write_text(text[:method.start()] + body + text[method.end():], encoding="utf-8")
+    # These diagnostics run in the shared renderer, including nested scenes,
+    # in both preview and export. Their constructors only capture arguments.
+    scene = find_one(decoded, "SceneKt.smali")
+    text = scene.read_text(encoding="utf-8")
+    for suffix, register, level in (("4", "v3", "c"), ("7", "v9", "h"), ("8", "v4", "h")):
+        marker = f"# Shared renderer diagnostic {suffix} omitted."
+        if marker in text:
+            continue
+        cls = "Lcom/alightcreative/app/motion/scene/SceneKt$renderWithGpu$1$" + suffix + ";"
+        pattern = re.compile(r"    new-instance " + register + ", " + re.escape(cls) + r"\s+"
+            r"invoke-direct \{[^\n]+\}, " + re.escape(cls) + r"-><init>\([^\n]+\)V\s+"
+            r"invoke-static \{v0, " + register + r"\}, Lt2/b;->" + level +
+            r"\(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;\)V")
+        text, count = pattern.subn("    " + marker, text)
+        if count != 1:
+            raise SystemExit(f"ERROR: shared renderer diagnostic changed: {suffix}")
+    scene.write_text(text, encoding="utf-8")
+    print("  Optimized encoder scheduling and removed per-frame export profiling", file=sys.stderr)
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit(f"Usage: {sys.argv[0]} <patch-dir> <decoded-dir>")
@@ -329,6 +401,9 @@ def main() -> None:
     patch_effect_number_edit(decoded)
     patch_scene_overlay(decoded)
     patch_native_preview(decoded)
+    patch_export_rendering(decoded)
+    subprocess.run([sys.executable, str(Path(__file__).with_name("check-export-drain.py")),
+                    str(decoded)], check=True, stdout=sys.stderr)
 
 
 if __name__ == "__main__":

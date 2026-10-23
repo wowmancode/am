@@ -75,10 +75,46 @@ def convert(source: str, labels: list[str]) -> tuple[str, list[str]]:
     return SAMPLE + body.strip() + "\n" + MAIN, controls
 
 
+def replace_once(source: str, before: str, after: str) -> str:
+    if source.count(before) != 1:
+        raise ValueError("optimized shader source anchor changed: " + before[:70])
+    return source.replace(before, after)
+
+
 def render(source: str, entry: dict, provenance: dict) -> str:
     shader, controls = convert(source, entry["controls"])
     name = entry["source"]
     vertex_xml = ""
+    if name == "vegas_light_rays.glsl":
+        # A sample outside the light's radius is multiplied by exactly zero.
+        # Determine its coverage before fetching/unpremultiplying the texture.
+        shader = replace_once(shader,
+            "    vec4 rays = vec4(0.0);",
+            "    if (blend <= 0.0 || power <= 0.0) { fxPortOutput = original; return; }\n"
+            "    vec4 rays = vec4(0.0);")
+        shader = replace_once(shader,
+            "        vec4 sampleColor = fxPortSample(inputImg.texture, clamp(p, 0.0, 1.0));",
+            "        float bound = clamp(1.0 - length((p - light) / radius), 0.0, 1.0);\n"
+            "        if (bound > 0.0) {\n"
+            "        vec4 sampleColor = i == 0 ? original : fxPortSample(inputImg.texture, clamp(p, 0.0, 1.0));")
+        shader = replace_once(shader,
+            "        float bound = clamp(1.0 - length((p - light) / radius), 0.0, 1.0);\n"
+            "        rays += sampleColor * bright * bound * (1.0 - 0.5 * t);",
+            "        rays += sampleColor * bright * bound * (1.0 - 0.5 * t);\n        }")
+    if name == "vegas_glow.glsl":
+        shader = replace_once(shader,
+            "    float suppression = clamp(0.5 * uControl4, 0.0, 1.0);",
+            "    if (intensity <= 0.0) { fxPortOutput = original; return; }\n"
+            "    float suppression = clamp(0.5 * uControl4, 0.0, 1.0);")
+    if name == "vegas_radial_blur.glsl":
+        shader = replace_once(shader,
+            "    vec4 sum = vec4(0.0);\n    for (int i = 0; i < 13; ++i)",
+            "    vec4 sum = original;\n    for (int i = 1; i < 13; ++i)")
+    if name == "vegas_unsharp_mask.glsl":
+        shader = replace_once(shader,
+            "            blur += wx * wy * fxPortSample(inputImg.texture, tapUv);",
+            "            vec4 sampleColor = (x == 0 && y == 0) ? original : fxPortSample(inputImg.texture, tapUv);\n"
+            "            blur += wx * wy * sampleColor;")
     if name == "vegas_2d_shadow.glsl":
         # The same 65 weights were evaluated for each of the 65 rows.
         # Keep the sampling and accumulation order, but reuse those weights.

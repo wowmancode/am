@@ -41,8 +41,8 @@ void fxPortMain() {
     if (uControl5 > 0.5) {
         span = delta / distanceToCenter * strength * 0.25;
     }
-    vec4 sum = vec4(0.0);
-    for (int i = 0; i < 13; ++i) {
+    vec4 sum = original;
+    for (int i = 1; i < 13; ++i) {
         float t = float(i) / 12.0;
         vec2 p = clamp(uv - span * t, 0.0, 1.0);
         sum += fxPortSample(inputImg.texture, p);
