@@ -14,13 +14,25 @@ is reassembled. It:
 3. Hooks EffectBrowserActivity.onCreate to add a floating "+ Custom" button
    that opens the editor dialog.
 
-4. Adds a Transitions row under Add Effect in the Effects list.
-
-5. Adds a home-screen Project XML picker which forwards files to the app's
+4. Adds a home-screen Project XML picker which forwards files to the app's
    existing native ImportActivity.
 
-6. Lets effect value labels open a numeric keyboard for slider and spinner
+5. Lets effect value labels open a numeric keyboard for slider and spinner
    controls, using their existing change handlers to persist the value.
+
+6. Uses the empty scene overlay for preview and export, removing the watermark.
+
+7. Removes diagnostic work from the live preview loop and adds an optional
+   per-player Preview FPS button in the editor.
+
+8. Drains available video encoder output without stalling each frame, while
+   preserving the blocking end-of-stream drain, and removes export profiling.
+
+9. Adds project-backed XYZ controls and perspective projection to the native
+   Move & Transform panel, including its dial, trackpad, and keyframe bindings.
+
+10. Enables all native easing graphs through the AdvancedEasing benefit shared
+    by graph selection, editing, clipboard actions, and preview/export checks.
 
 The editor is a dialog over the effect browser rather than its own activity,
 so the manifest does not change. Its HTML page is added to the APK's assets
@@ -32,13 +44,12 @@ Usage:
 
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 
 LOADER_CLASS = "VisualEffectKt$initVisualEffects$1.smali"
 BROWSER_CLASS = "EffectBrowserActivity.smali"
-EFFECTS_FRAGMENT = "smali/i1/k.smali"
-EFFECTS_ADAPTER = "smali/i1/i.smali"
 EFFECT_PARAMETER_ROW = "smali/i1/k$a$a.smali"
 MAIN_ACTIVITY = "smali_classes4/com/alightcreative/app/motion/activities/main/MainActivity.smali"
 MARKER = "Lcom/wowmancode/customfx/"
@@ -126,32 +137,6 @@ def patch_effect_browser(decoded: Path) -> None:
     print(f"  Added the Custom button to {path.name}", file=sys.stderr)
 
 
-def patch_transitions_row(decoded: Path) -> None:
-    fragment = decoded / EFFECTS_FRAGMENT
-    adapter = decoded / EFFECTS_ADAPTER
-    if not fragment.is_file() or not adapter.is_file():
-        raise SystemExit("ERROR: Effects list classes are missing")
-
-    text = fragment.read_text(encoding="utf-8")
-    if "TransitionUi;->bind" not in text:
-        anchor = "invoke-super {p0, p1, p2}, Landroidx/fragment/app/Fragment;->onViewCreated(Landroid/view/View;Landroid/os/Bundle;)V"
-        if text.count(anchor) != 1:
-            raise SystemExit("ERROR: Effects fragment onViewCreated hook site changed")
-        text = text.replace(anchor, anchor + "\n    invoke-static {p0}, Lcom/wowmancode/customfx/TransitionUi;->bind(Li1/k;)V")
-        fragment.write_text(text, encoding="utf-8")
-
-    text = adapter.read_text(encoding="utf-8")
-    if "TransitionUi;->wrapAddRow" not in text:
-        anchor = "invoke-direct {v0, p2, p1}, Li1/i$a;-><init>(ILandroid/view/View;)V"
-        if text.count(anchor) != 1:
-            raise SystemExit("ERROR: Effects adapter row creation hook site changed")
-        text = text.replace(anchor,
-            "invoke-static {p1, p2}, Lcom/wowmancode/customfx/TransitionUi;->wrapAddRow(Landroid/view/View;I)Landroid/view/View;\n"
-            "    move-result-object p1\n    " + anchor)
-        adapter.write_text(text, encoding="utf-8")
-    print("  Added the Transitions row to Effects", file=sys.stderr)
-
-
 def patch_project_import(decoded: Path) -> None:
     path = decoded / MAIN_ACTIVITY
     if not path.is_file():
@@ -212,6 +197,228 @@ def patch_effect_number_edit(decoded: Path) -> None:
     print("  Added tap-to-edit numeric effect values", file=sys.stderr)
 
 
+def patch_scene_overlay(decoded: Path) -> None:
+    path = find_one(decoded, "SceneOverlayKt.smali")
+    find_one(decoded, "SceneOverlay_None.smali")
+    text = path.read_text(encoding="utf-8")
+    signature = (
+        ".method public static final getCurrentSceneOverlay("
+        "Lcom/alightcreative/app/motion/scene/Scene;"
+        "Lcom/alightcreative/app/motion/scene/ExportParams;)"
+        "Lcom/alightcreative/app/motion/scene/SceneOverlay;\n"
+    )
+    methods = list(re.finditer(re.escape(signature) + r".*?^\.end method", text, re.S | re.M))
+    if len(methods) != 1:
+        raise SystemExit("ERROR: scene overlay selector changed")
+    method = methods[0]
+    body = method.group(0)
+    old = (
+        "sget-object p0, Lcom/alightcreative/app/motion/scene/SceneOverlay_StandardWM;"
+        "->INSTANCE:Lcom/alightcreative/app/motion/scene/SceneOverlay_StandardWM;"
+    )
+    new = (
+        "# Use the empty overlay for personal builds.\n    "
+        "sget-object p0, Lcom/alightcreative/app/motion/scene/SceneOverlay_None;"
+        "->INSTANCE:Lcom/alightcreative/app/motion/scene/SceneOverlay_None;"
+    )
+    if old not in body and body.count(new) == 1:
+        return
+    if body.count(old) != 1:
+        raise SystemExit("ERROR: expected one standard watermark overlay fallback")
+    body = body.replace(old, new)
+    path.write_text(text[:method.start()] + body + text[method.end():], encoding="utf-8")
+    print("  Disabled the watermark in scene preview and export", file=sys.stderr)
+
+
+def patch_native_preview(decoded: Path) -> None:
+    player = find_one(decoded, "ScenePlayer.smali")
+    worker = find_one(decoded, "ScenePlayer$2.smali")
+    request = find_one(decoded, "ScenePlayer$renderFrame$2.smali")
+    editor = find_one(decoded, "EditActivity.smali")
+    gl_context = find_one(decoded, "GLContext.smali")
+    text = gl_context.read_text(encoding="utf-8")
+    method = re.search(r"^\.method public final l0\(\)I\n.*?^\.end method", text, re.M | re.S)
+    if not method:
+        raise SystemExit("ERROR: preview surface swap method changed")
+    if "Avoid formatting a diagnostic for every surface swap" not in method.group():
+        log = re.compile(r"    new-instance v1, Ljava/lang/StringBuilder;.*?"
+                         r"invoke-static \{v2, v1\}, Landroid/util/Log;->d\(Ljava/lang/String;Ljava/lang/String;\)I", re.S)
+        body, count = log.subn("    # Avoid formatting a diagnostic for every surface swap.", method.group())
+        if count != 1:
+            raise SystemExit("ERROR: preview surface swap diagnostic changed")
+        gl_context.write_text(text[:method.start()] + body + text[method.end():], encoding="utf-8")
+    text = player.read_text(encoding="utf-8")
+    if "previewFrameCount:J" not in text:
+        anchor = ".field private didRender:Z"
+        if text.count(anchor) != 1:
+            raise SystemExit("ERROR: preview player fields changed")
+        text = text.replace(anchor, anchor + "\n\n.field public volatile previewFrameCount:J")
+        # This lambda only formats a debug log on each frame request.
+        log = re.compile(
+            r"    new-instance v0, Lcom/alightcreative/app/motion/scene/ScenePlayer\$renderFrame\$1;"
+            r".*?invoke-static \{p0, v0\}, Lt2/b;->c\(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;\)V", re.S)
+        text, count = log.subn("    # Avoid a per-request diagnostic allocation.", text)
+        if count != 1:
+            raise SystemExit("ERROR: preview frame request log changed")
+        player.write_text(text, encoding="utf-8")
+
+    text = worker.read_text(encoding="utf-8")
+    if "previewFrameCount:J" not in text:
+        trace = ("invoke-virtual {v0}, Lcom/alightcreative/app/motion/persist/a;"
+                 "->getDisableRenderPerformanceTrace()Z\n\n    move-result v6")
+        stats = ("invoke-static {v0, v3}, Lcom/alightcreative/app/motion/scene/SceneKt;"
+                 "->statsForFrame(Lcom/alightcreative/app/motion/scene/Scene;I)"
+                 "Lcom/alightcreative/app/motion/scene/FrameStats;\n\n    move-result-object v0")
+        swap = "invoke-virtual {v0}, Lcom/alightcreative/gl/GLContext;->l0()I"
+        if any(text.count(anchor) != 1 for anchor in (trace, stats, swap)):
+            raise SystemExit("ERROR: live preview render loop changed")
+        text = text.replace(trace, "const/4 v6, 0x1    # Disable per-frame profiling traces.")
+        text = text.replace(stats, "const/4 v0, 0x0    # Statistics were only consumed by profiling.")
+        log = re.compile(
+            r"    iget-object v3, v1, Lcom/alightcreative/app/motion/scene/ScenePlayer\$2;->this\$0:Lcom/alightcreative/app/motion/scene/ScenePlayer;\n\n"
+            r"    new-instance v4, Lcom/alightcreative/app/motion/scene/ScenePlayer\$2\$4;"
+            r".*?invoke-static \{v3, v4\}, Lt2/b;->c\(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;\)V", re.S)
+        text, count = log.subn("    # No debug lambda allocation while polling the preview queue.", text)
+        if count != 1:
+            raise SystemExit("ERROR: preview queue diagnostic changed")
+        hook = ("\n    move-result v3\n    const/16 v4, 0x3000\n"
+                "    if-ne v3, v4, :customfps_swap_done\n\n"
+                "    iget-object v0, v1, Lcom/alightcreative/app/motion/scene/ScenePlayer$2;"
+                "->this$0:Lcom/alightcreative/app/motion/scene/ScenePlayer;\n"
+                "    iget-wide v3, v0, Lcom/alightcreative/app/motion/scene/ScenePlayer;->previewFrameCount:J\n"
+                "    const-wide/16 v10, 0x1\n    add-long/2addr v3, v10\n"
+                "    iput-wide v3, v0, Lcom/alightcreative/app/motion/scene/ScenePlayer;->previewFrameCount:J\n"
+                "    :customfps_swap_done")
+        text = text.replace(swap, swap + hook)
+        worker.write_text(text, encoding="utf-8")
+
+    text = request.read_text(encoding="utf-8")
+    log = re.compile(
+        r"    new-instance v1, Lcom/alightcreative/app/motion/scene/ScenePlayer\$renderFrame\$2\$1;"
+        r".*?invoke-static \{v0, v1\}, Lt2/b;->c\(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;\)V", re.S)
+    text, count = log.subn("    # Pending-frame updates do not need a diagnostic lambda.", text)
+    if count:
+        request.write_text(text, encoding="utf-8")
+    elif "Pending-frame updates do not need" not in text:
+        raise SystemExit("ERROR: pending preview frame diagnostic changed")
+
+    text = editor.read_text(encoding="utf-8")
+    hooks = {
+        "onCreate": ("invoke-virtual {p0, p1}, Landroidx/appcompat/app/c;->setContentView(I)V", "attach"),
+        "onResume": ("invoke-super {p0}, Landroidx/fragment/app/e;->onResume()V", "resume"),
+        "onPause": (".locals 4", "pause"),
+    }
+    for name, (anchor, action) in hooks.items():
+        marker = f"PreviewFpsUi;->{action}"
+        if marker in text:
+            continue
+        method = re.search(r"^\.method protected " + name + r"\([^\n]*\n.*?^\.end method", text, re.M | re.S)
+        if not method or method.group().count(anchor) != 1:
+            raise SystemExit(f"ERROR: editor {name} FPS hook changed")
+        body = method.group().replace(anchor, anchor + "\n    invoke-static {p0}, "
+            f"Lcom/wowmancode/customfx/PreviewFpsUi;->{action}(Landroid/app/Activity;)V")
+        text = text[:method.start()] + body + text[method.end():]
+    editor.write_text(text, encoding="utf-8")
+    print("  Optimized the live preview loop and added optional Preview FPS", file=sys.stderr)
+
+
+def patch_export_rendering(decoded: Path) -> None:
+    codec = find_one(decoded, "MediaCodecExportContext.smali")
+    exporter = find_one(decoded, "SceneExporter.smali")
+    text = codec.read_text(encoding="utf-8")
+    if "export_drain_timeout_ready" not in text:
+        method = re.search(r"^\.method private final drainEncoder\(Z\)V\n.*?^\.end method", text, re.M | re.S)
+        anchor = ("const-wide/16 v4, 0x2710\n\n"
+                  "    invoke-virtual {v2, v3, v4, v5}, Landroid/media/MediaCodec;"
+                  "->dequeueOutputBuffer(Landroid/media/MediaCodec$BufferInfo;J)I")
+        if not method or method.group().count(anchor) != 1:
+            raise SystemExit("ERROR: video encoder drain timeout changed")
+        # Drain every ready buffer before submitting another frame. Waiting
+        # for future output here serializes GPU rendering and encoding. EOS
+        # still waits/retries until the encoder emits its final flagged buffer.
+        body = method.group().replace(anchor,
+            "const-wide/16 v4, 0x0\n"
+            "    if-eqz p1, :export_drain_timeout_ready\n"
+            "    const-wide/16 v4, 0x2710\n"
+            "    :export_drain_timeout_ready\n\n" + anchor.split("\n\n", 1)[1])
+        text = text[:method.start()] + body + text[method.end():]
+        # These callbacks only format diagnostic strings. Leave format-change,
+        # warning, failure, end-of-stream, and buffer/muxer handling untouched.
+        for suffix, register, level in (("beginFrame$1", "v0", "c"),
+                                        ("drainEncoder$1", "v0", "h"),
+                                        ("drainEncoder$3", "v3", "h"),
+                                        ("drainEncoder$8", "v3", "h")):
+            cls = "Lcom/alightcreative/app/motion/scene/MediaCodecExportContext$" + suffix + ";"
+            pattern = re.compile(r"    new-instance " + register + ", " + re.escape(cls) +
+                r".*?invoke-static \{p0, " + register + r"\}, Lt2/b;->" + level +
+                r"\(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;\)V", re.S)
+            text, count = pattern.subn("    # Avoid a per-frame encoder diagnostic allocation.", text)
+            if count != 1:
+                raise SystemExit(f"ERROR: encoder diagnostic changed: {suffix}")
+        codec.write_text(text, encoding="utf-8")
+
+    text = exporter.read_text(encoding="utf-8")
+    if "Export frames do not need a profiling trace" not in text:
+        method = re.search(r"^\.method private final renderFrame\([^\n]*\n.*?^\.end method", text, re.M | re.S)
+        if not method:
+            raise SystemExit("ERROR: export renderFrame changed")
+        pattern = re.compile(r"    invoke-static \{\}, Lcom/google/firebase/perf/c;->c\(\)Lcom/google/firebase/perf/c;"
+            r".*?invoke-virtual \{v1\}, Lcom/google/firebase/perf/metrics/Trace;->start\(\)V", re.S)
+        body, count = pattern.subn("    # Export frames do not need a profiling trace.", method.group())
+        stop = "invoke-virtual {v1}, Lcom/google/firebase/perf/metrics/Trace;->stop()V"
+        if count != 1 or body.count(stop) != 1:
+            raise SystemExit("ERROR: per-frame export profiling changed")
+        body = body.replace(stop, "# No per-frame export profiling to stop.")
+        exporter.write_text(text[:method.start()] + body + text[method.end():], encoding="utf-8")
+    # These diagnostics run in the shared renderer, including nested scenes,
+    # in both preview and export. Their constructors only capture arguments.
+    scene = find_one(decoded, "SceneKt.smali")
+    text = scene.read_text(encoding="utf-8")
+    for suffix, register, level in (("4", "v3", "c"), ("7", "v9", "h"), ("8", "v4", "h")):
+        marker = f"# Shared renderer diagnostic {suffix} omitted."
+        if marker in text:
+            continue
+        cls = "Lcom/alightcreative/app/motion/scene/SceneKt$renderWithGpu$1$" + suffix + ";"
+        pattern = re.compile(r"    new-instance " + register + ", " + re.escape(cls) + r"\s+"
+            r"invoke-direct \{[^\n]+\}, " + re.escape(cls) + r"-><init>\([^\n]+\)V\s+"
+            r"invoke-static \{v0, " + register + r"\}, Lt2/b;->" + level +
+            r"\(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;\)V")
+        text, count = pattern.subn("    " + marker, text)
+        if count != 1:
+            raise SystemExit(f"ERROR: shared renderer diagnostic changed: {suffix}")
+    scene.write_text(text, encoding="utf-8")
+    print("  Optimized encoder scheduling and removed per-frame export profiling", file=sys.stderr)
+
+
+def patch_graph_access(decoded: Path) -> None:
+    paths = list(decoded.glob("smali*/d1/g.smali"))
+    if len(paths) != 1:
+        raise SystemExit("ERROR: graph purchase state changed")
+    path = paths[0]
+    text = path.read_text(encoding="utf-8")
+    marker = "# Enable all native easing graphs in every local purchase snapshot."
+    if marker in text:
+        return
+    constructor = ("<init>(Ljava/util/Set;Ljava/util/List;Ljava/util/List;"
+                   "Lcom/alightcreative/account/f;ZLcom/alightcreative/account/c;"
+                   "Ljava/lang/Long;Ljava/util/List;Ljava/util/List;)V")
+    method = re.search(r"^\.method public constructor " + re.escape(constructor) +
+                       r"\n.*?^\.end method", text, re.M | re.S)
+    anchor = "    iput-object p1, p0, Ld1/g;->a:Ljava/util/Set;"
+    if not method or method.group().count(anchor) != 1 or ".locals 1" not in method.group():
+        raise SystemExit("ERROR: native graph benefit constructor changed")
+    sets = find_one(decoded, "SetsKt.smali").read_text(encoding="utf-8")
+    if ".method public static bridge synthetic plus(Ljava/util/Set;Ljava/lang/Object;)Ljava/util/Set;" not in sets:
+        raise SystemExit("ERROR: native immutable set union API changed")
+    body = method.group().replace(anchor,
+        "    " + marker + "\n"
+        "    sget-object v0, Lcom/alightcreative/account/LicenseBenefit;->AdvancedEasing:Lcom/alightcreative/account/LicenseBenefit;\n"
+        "    invoke-static {p1, v0}, Lkotlin/collections/SetsKt;->plus(Ljava/util/Set;Ljava/lang/Object;)Ljava/util/Set;\n"
+        "    move-result-object p1\n\n" + anchor)
+    path.write_text(text[:method.start()] + body + text[method.end():], encoding="utf-8")
+    print("  Unlocked every native easing graph for selection, editing, and export", file=sys.stderr)
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit(f"Usage: {sys.argv[0]} <patch-dir> <decoded-dir>")
@@ -225,9 +432,16 @@ def main() -> None:
     copy_smali(decoded, patch)
     patch_effect_loader(decoded)
     patch_effect_browser(decoded)
-    patch_transitions_row(decoded)
     patch_project_import(decoded)
     patch_effect_number_edit(decoded)
+    patch_scene_overlay(decoded)
+    patch_native_preview(decoded)
+    patch_export_rendering(decoded)
+    patch_graph_access(decoded)
+    subprocess.run([sys.executable, str(Path(__file__).with_name("inject-transform3d.py")),
+                    str(decoded)], check=True, stdout=sys.stderr)
+    subprocess.run([sys.executable, str(Path(__file__).with_name("check-export-drain.py")),
+                    str(decoded)], check=True, stdout=sys.stderr)
 
 
 if __name__ == "__main__":
