@@ -31,6 +31,9 @@ is reassembled. It:
 9. Adds project-backed XYZ controls and perspective projection to the native
    Move & Transform panel, including its dial, trackpad, and keyframe bindings.
 
+10. Enables all native easing graphs through the AdvancedEasing benefit shared
+    by graph selection, editing, clipboard actions, and preview/export checks.
+
 The editor is a dialog over the effect browser rather than its own activity,
 so the manifest does not change. Its HTML page is added to the APK's assets
 by add-effects.py.
@@ -387,6 +390,35 @@ def patch_export_rendering(decoded: Path) -> None:
     print("  Optimized encoder scheduling and removed per-frame export profiling", file=sys.stderr)
 
 
+def patch_graph_access(decoded: Path) -> None:
+    paths = list(decoded.glob("smali*/d1/g.smali"))
+    if len(paths) != 1:
+        raise SystemExit("ERROR: graph purchase state changed")
+    path = paths[0]
+    text = path.read_text(encoding="utf-8")
+    marker = "# Enable all native easing graphs in every local purchase snapshot."
+    if marker in text:
+        return
+    constructor = ("<init>(Ljava/util/Set;Ljava/util/List;Ljava/util/List;"
+                   "Lcom/alightcreative/account/f;ZLcom/alightcreative/account/c;"
+                   "Ljava/lang/Long;Ljava/util/List;Ljava/util/List;)V")
+    method = re.search(r"^\.method public constructor " + re.escape(constructor) +
+                       r"\n.*?^\.end method", text, re.M | re.S)
+    anchor = "    iput-object p1, p0, Ld1/g;->a:Ljava/util/Set;"
+    if not method or method.group().count(anchor) != 1 or ".locals 1" not in method.group():
+        raise SystemExit("ERROR: native graph benefit constructor changed")
+    sets = find_one(decoded, "SetsKt.smali").read_text(encoding="utf-8")
+    if ".method public static bridge synthetic plus(Ljava/util/Set;Ljava/lang/Object;)Ljava/util/Set;" not in sets:
+        raise SystemExit("ERROR: native immutable set union API changed")
+    body = method.group().replace(anchor,
+        "    " + marker + "\n"
+        "    sget-object v0, Lcom/alightcreative/account/LicenseBenefit;->AdvancedEasing:Lcom/alightcreative/account/LicenseBenefit;\n"
+        "    invoke-static {p1, v0}, Lkotlin/collections/SetsKt;->plus(Ljava/util/Set;Ljava/lang/Object;)Ljava/util/Set;\n"
+        "    move-result-object p1\n\n" + anchor)
+    path.write_text(text[:method.start()] + body + text[method.end():], encoding="utf-8")
+    print("  Unlocked every native easing graph for selection, editing, and export", file=sys.stderr)
+
+
 def main() -> None:
     if len(sys.argv) != 3:
         raise SystemExit(f"Usage: {sys.argv[0]} <patch-dir> <decoded-dir>")
@@ -405,6 +437,7 @@ def main() -> None:
     patch_scene_overlay(decoded)
     patch_native_preview(decoded)
     patch_export_rendering(decoded)
+    patch_graph_access(decoded)
     subprocess.run([sys.executable, str(Path(__file__).with_name("inject-transform3d.py")),
                     str(decoded)], check=True, stdout=sys.stderr)
     subprocess.run([sys.executable, str(Path(__file__).with_name("check-export-drain.py")),
