@@ -34,6 +34,23 @@ def main(decoded):
     if 'custom3dMode()I' not in text:
         text+='\n.method public custom3dMode()I\n    .locals 1\n    invoke-virtual {p0}, Li1/b0;->y()I\n    move-result v0\n    return v0\n.end method\n'
     fragment.write_text(text)
+    # AnimationCurveFragment serializes lenses with toString() into a Bundle.
+    # Resolve the synthetic axis inside the native path loop so nested animator
+    # properties/list indices continue through the app's normal lens parser.
+    parser=find('n2/f');text=parser.read_text()
+    if 'Transform3dUi;->restoreAxis' not in text:
+        match=method(text,'b');body=match.group()
+        anchor='    const/16 v11, 0x5b'
+        if body.count(anchor)!=1 or ':goto_a' not in body:
+            raise SystemExit('Native keyframe reference parser changed')
+        body=body.replace(anchor,
+            '    invoke-static {v7, v10}, Lcom/wowmancode/customfx/Transform3dUi;->restoreAxis(Ljava/lang/String;Ljava/lang/String;)Ln2/a;\n'
+            '    move-result-object v11\n'
+            '    if-eqz v11, :transform3d_native_ref\n'
+            '    move-object v6, v11\n'
+            '    goto/16 :goto_a\n'
+            '    :transform3d_native_ref\n\n'+anchor)
+        parser.write_text(text[:match.start()]+body+text[match.end():])
     angle=find('i1/z$n');text=angle.read_text()
     if 'Transform3dUi;->onAngle' not in text:
         anchor='    invoke-static {v1}, Ll1/e;->z(Landroidx/fragment/app/Fragment;)Lcom/alightcreative/app/motion/scene/SceneElement;'
@@ -68,6 +85,7 @@ def main(decoded):
     target=find('com/wowmancode/customfx/CustomEffectsUi').parents[3]
     build.compile_ui(decoded,target)
     subprocess.run([sys.executable, str(Path(__file__).with_name('check-transform3d-bindings.py')), str(decoded)], check=True, stdout=sys.stderr)
+    subprocess.run([sys.executable, str(Path(__file__).with_name('check-transform3d-keyframes.py')), str(decoded)], check=True, stdout=sys.stderr)
     print('  Added native Move & Transform XYZ controls and keyframe bindings',file=sys.stderr)
 
 

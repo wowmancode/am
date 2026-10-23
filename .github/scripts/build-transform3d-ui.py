@@ -35,6 +35,7 @@ METHODS = {
     'com/alightcreative/widget/RotateView': {'setAngle'},
     'i1/z': set(), 'i1/v': {'<init>','b','c'},
     'n2/a': {'a','b','c','d','e','get'},
+    'n2/f': {'b'},
     'l1/e': {'z','t','w','o','p','c'},
 }
 PRIMITIVES = {'V':'void','Z':'boolean','B':'byte','S':'short','I':'int','J':'long','F':'float','D':'double','C':'char'}

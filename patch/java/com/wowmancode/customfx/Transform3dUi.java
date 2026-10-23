@@ -26,6 +26,7 @@ import kotlin.reflect.KType;
 public final class Transform3dUi {
     public static final String EFFECT = "com.wowmancode.internal.transform3d";
     private static final String[] PARAMETERS = {"rotateX", "rotateY", "depth"};
+    private static final String AXIS_PATH = "com.alightcreative.app.motion.scene.SceneElement::transform.__custom3d_";
     private static final int MOVE = 0x7f0a0604, ROTATE = 0x7f0a0608, STATE = 0x7f0a7ff1;
     private static final int X = 0x7f0a03ea, Y = 0x7f0a03ec, XL = 0x7f0a03eb, YL = 0x7f0a03ed;
     private static final int PAD = 0x7f0a0524, GUIDE = 0x7f0a0674;
@@ -72,19 +73,31 @@ public final class Transform3dUi {
     public static List bindings(i1.z fragment, List original) {
         State state = state(fragment);
         if (state == null) return original;
+        int mode = fragment.custom3dMode();
+        int axis = mode == MOVE && state.moveAxis == 2 ? 2 : mode == ROTATE && state.rotationAxis < 2 ? state.rotationAxis : -1;
+        if (axis < 0) return original;
         if (state.lenses == null) {
             KType type = ((i1.v) original.get(1)).b().e();
             state.lenses = new AxisLens[]{new AxisLens(0, type), new AxisLens(1, type), new AxisLens(2, type)};
         }
-        int mode = fragment.custom3dMode();
-        int axis = mode == MOVE && state.moveAxis == 2 ? 2 : mode == ROTATE && state.rotationAxis < 2 ? state.rotationAxis : -1;
-        if (axis < 0) return original;
         ArrayList result = new ArrayList(original);
         int index = mode == MOVE ? 0 : 1;
         i1.v previous = (i1.v) original.get(index);
         result.set(index, new i1.v(mode == MOVE ? AnimatorOf.Float : AnimatorOf.Rotate,
                                   state.lenses[axis], previous.c()));
         return result;
+    }
+    /** Restore our synthetic property, then let the native parser compose any suffix. */
+    public static n2.a restoreAxis(String path, String segment) {
+        for (int axis = 0; axis < PARAMETERS.length; axis++) {
+            String base = AXIS_PATH + PARAMETERS[axis];
+            if ((path.equals(base) || path.startsWith(base + "."))
+                    && segment.equals("__custom3d_" + PARAMETERS[axis])) {
+                KType type = n2.f.b("com.alightcreative.app.motion.scene.SceneElement::transform.rotation").e();
+                return new AxisLens(axis, type);
+            }
+        }
+        return null;
     }
     static KeyableVisualEffectRef effect(SceneElement element) {
         for (Object item : element.getVisualEffects().values()) {
@@ -122,6 +135,9 @@ public final class Transform3dUi {
         public Object b(Object element, Object value) { return withKeyable((SceneElement) element, axis, (Keyable) value); }
         public Object d(Object element, Function1 update) { return b(element, update.invoke(get(element))); }
         public KType e() { return type; }
+        public String toString() { return AXIS_PATH + PARAMETERS[axis]; }
+        public boolean equals(Object other) { return other instanceof AxisLens && ((AxisLens) other).axis == axis; }
+        public int hashCode() { return EFFECT.hashCode() * 31 + axis; }
     }
     private static final class State {
         final i1.z fragment;
