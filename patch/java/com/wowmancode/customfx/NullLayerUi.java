@@ -14,17 +14,18 @@ import java.util.Set;
 
 /** Project-backed null layer implemented as a native transform group. */
 public final class NullLayerUi implements View.OnClickListener {
-    private static final int BUTTON_ID = 0x7f0a7ff2;
+    private static final String BUTTON_TAG = "wowmancode-null-button";
     private final Activity activity;
 
     private NullLayerUi(Activity activity) { this.activity = activity; }
 
     public static void attach(Activity activity) {
-        if (activity.findViewById(BUTTON_ID) != null) return;
         View content = activity.findViewById(android.R.id.content);
         if (!(content instanceof FrameLayout)) return;
+        if (content.findViewWithTag(BUTTON_TAG) != null) return;
         TextView button = new TextView(activity);
-        button.setId(BUTTON_ID);
+        button.setId(View.generateViewId());
+        button.setTag(BUTTON_TAG);
         button.setText("Null");
         button.setGravity(Gravity.CENTER);
         button.setTextColor(0xffffffff);
