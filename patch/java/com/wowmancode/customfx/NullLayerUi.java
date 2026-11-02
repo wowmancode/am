@@ -24,7 +24,7 @@ public final class NullLayerUi implements View.OnClickListener {
         if (!(content instanceof FrameLayout)) return;
         if (content.findViewWithTag(BUTTON_TAG) != null) return;
         TextView button = new TextView(activity);
-        button.setId(View.generateViewId());
+        button.setId(0x7f0a7ff2);
         button.setTag(BUTTON_TAG);
         button.setText("Null");
         button.setGravity(Gravity.CENTER);
@@ -36,7 +36,6 @@ public final class NullLayerUi implements View.OnClickListener {
         background.setColor(0xff2a7fff);
         background.setCornerRadius(dp(activity, 18));
         button.setBackground(background);
-        button.setElevation(dp(activity, 6));
         button.setContentDescription("Make Null. Select layers first; moving the Null group moves them.");
         button.setOnClickListener(new NullLayerUi(activity));
         FrameLayout.LayoutParams layout = new FrameLayout.LayoutParams(-2, dp(activity, 40), Gravity.TOP | Gravity.START);
@@ -54,11 +53,11 @@ public final class NullLayerUi implements View.OnClickListener {
                 Toast.makeText(activity, "Select one or more layers, then tap Null", Toast.LENGTH_SHORT).show();
                 return;
             }
-            f3.b.a undo = l1.e.c(activity);
+            f3.b.a undo = l1.e.a(activity);
             try {
                 Scene scene = holder.getScene();
-                Scene grouped = ElementGroupingKt.groupElementsById$default(
-                    scene, selected, "Null", null, null, 12, null);
+                Scene grouped = ElementGroupingKt.groupElementsById(
+                    scene, selected, "Null", com.alightcreative.app.motion.scene.GroupBoundsMode.UNION_ELEMENTS_SCENE, null);
                 holder.setScene(grouped);
             } finally {
                 if (undo != null) undo.b();
