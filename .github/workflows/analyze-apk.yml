@@ -26,46 +26,47 @@ jobs:
       - name: Decode APK
         run: apktool d -f Alight_Motion-*.apk -o decoded
 
-      - name: Inspect null and parent layer support
+      - name: Inspect null-layer construction and grouping APIs
         shell: bash
         run: |
           set -e
-          echo '=== USER-FACING NULL/PARENT/LINK STRINGS ==='
-          grep -RInaiE 'null.?layer|parent|link|constraint|follow|attach|empty.?layer|group' decoded/res/values*/strings.xml | head -1200 || true
+          echo '=== ENGLISH GROUP/LINK STRINGS ==='
+          grep -nEi 'name="[^"]*(group|link|parent|attach|follow|constraint|empty|null_layer|new_layer|add_layer)[^"]*"' decoded/res/values/strings.xml | head -800 || true
 
-          echo '=== SMALI STRING CONSTANTS ==='
-          grep -RInaiE --include='*.smali' '"[^"]*(null|parent|link|constraint|follow|attach|group)[^"]*"' decoded/smali* | head -1600 || true
-
-          echo '=== CANDIDATE CLASSES ==='
+          echo '=== GROUPING METHOD NAMES ==='
           find decoded -type f -path '*/smali*/*.smali' |
             sed 's#^decoded/##' |
-            grep -Ei '(Null|Parent|Link|Follow|Constraint|Attach|Group|ElementType|LayerType)' |
-            sort | head -1600
+            grep -Ei '(Group|Element|Layer|SceneHolder|EditActivity)' |
+            while IFS= read -r rel; do
+              grep -HnE '^\.method ([^{]*(group|link|parent|attach|follow|constraint|addElement|addLayer|insertElement|copyUpdatingElements)[^{]*)' "decoded/$rel"
+            done | head -2500 || true
 
-          echo '=== SCENE ELEMENT FIELDS AND METHODS ==='
+          echo '=== SCENE AND SCENEHOLDER FIELDS/METHODS ==='
           for NAME in \
-            'SceneElement.smali' \
-            'SceneElementType.smali' \
-            'SceneType.smali' \
-            'ElementType.smali' \
-            'SceneElementTypeImpl.smali'; do
+            'Scene.smali' \
+            'SceneHolder.smali' \
+            'SceneHolderImpl.smali' \
+            'SceneElementKt.smali' \
+            'ElementGroupingKt.smali' \
+            'NestedSceneElementTypeImpl.smali'; do
             FILE="$(find decoded -type f -name "$NAME" -print -quit)"
             echo "=== $NAME :: $FILE ==="
             if [ -n "$FILE" ]; then grep -nE '^\.field|^\.method' "$FILE"; fi
           done
 
-          echo '=== LINK/PARENT METHOD SIGNATURES ==='
-          find decoded -type f -path '*/smali*/*.smali' |
-            grep -Ei '(Parent|Link|Follow|Constraint|Attach|Group)' |
-            while IFS= read -r file; do
-              grep -HnE '^\.method|^\.field' "$file"
-            done | head -3000 || true
+          echo '=== GROUPING METHODS ==='
+          GROUP_FILE="$(find decoded -type f -name 'ElementGroupingKt.smali' -print -quit)"
+          if [ -n "$GROUP_FILE" ]; then
+            awk '/^\.method /,/^\.end method/' "$GROUP_FILE"
+          fi
 
-          echo '=== ADD-LAYER UI CLASSES ==='
-          find decoded -type f -path '*/smali*/*.smali' |
-            sed 's#^decoded/##' |
-            grep -Ei '(AddLayer|LayerAdd|AddElement|ElementAdd|PickLayer|LayerPicker|AddMenu|ProjectEditor|EditorMenu)' |
-            sort | head -1000
+          echo '=== EMPTY SCENE FACTORY ==='
+          SCENE_KT="$(find decoded -type f -name 'SceneKt.smali' -print -quit)"
+          awk '/^\.method public static final emptyScene\(/,/^\.end method/' "$SCENE_KT"
+
+          echo '=== SCENE HOLDER INTERFACE ==='
+          HOLDER="$(find decoded -type f -name 'SceneHolder.smali' -print -quit)"
+          sed -n '1,1000p' "$HOLDER"
 
       - name: Build report
         shell: bash
