@@ -331,8 +331,9 @@ def patch_complex_scene_performance(decoded: Path) -> None:
         legacy = re.compile(
             r"    invoke-virtual \{v0\}, Lcom/alightcreative/app/motion/persist/a;"
             r"->getLowQualityPreview\(\)Z\n"
-            r"(?:    \.line \d+\n)?    move-result v0\n"
-            r"    iput-boolean v0, p0, Lcom/alightcreative/app/motion/activities/"
+            r"\s*(?:    \.line \d+\n)?\s*move-result v0\n"
+            r"\s*(?:    \.line \d+\n)?\s*iput-boolean v0, p0, "
+            r"Lcom/alightcreative/app/motion/activities/"
             r"EditActivity;->R0:Z")
         replacement = (
             "    " + marker + "\n"
