@@ -412,7 +412,7 @@ def patch_license_benefits(decoded: Path) -> None:
 
     enum_text = find_one(decoded, "LicenseBenefit.smali").read_text(encoding="utf-8")
     benefits = re.findall(
-        r"^\.field public static final ([A-Za-z_$][\w$]*):"
+        r"^\.field public static final (?:enum )?([A-Za-z_$][\w$]*):"
         r"Lcom/alightcreative/account/LicenseBenefit;$",
         enum_text,
         re.M,
