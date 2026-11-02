@@ -356,16 +356,18 @@ def patch_complex_scene_performance(decoded: Path) -> None:
 
     remote_marker = "# The watermark remote-config result was unused on every preview frame."
     if remote_marker not in body:
-        remote = re.compile(
-            r"    invoke-static \{\}, Lcom/google/firebase/remoteconfig/g;->i\(\)"
-            r"Lcom/google/firebase/remoteconfig/g;\n"
-            r"\s*move-result-object v1\n"
-            r"    const-string v2, \"large_bg_watermark\"\n"
-            r"    invoke-virtual \{v1, v2\}, Lcom/google/firebase/remoteconfig/g;"
-            r"->g\(Ljava/lang/String;\)Z\n")
-        body, count = remote.subn("    " + remote_marker + "\n", body)
-        if count != 1:
+        remote_start = body.find(
+            "    invoke-static {}, Lcom/google/firebase/remoteconfig/g;"
+            "->i()Lcom/google/firebase/remoteconfig/g;")
+        watermark = body.find('const-string v2, "large_bg_watermark"', remote_start)
+        remote_end = body.find(
+            "->g(Ljava/lang/String;)Z", watermark)
+        if remote_start < 0 or watermark < 0 or remote_end < 0:
             raise SystemExit("ERROR: per-frame watermark remote-config read changed")
+        remote_end = body.find("\n", remote_end)
+        if remote_end < 0:
+            raise SystemExit("ERROR: per-frame watermark read terminator changed")
+        body = body[:remote_start] + "    " + remote_marker + body[remote_end:]
 
     log_marker = "# Per-frame scene diagnostic callbacks omitted."
     callbacks = (
