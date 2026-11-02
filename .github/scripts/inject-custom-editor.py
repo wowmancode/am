@@ -416,7 +416,8 @@ def patch_null_layer(decoded: Path) -> None:
         text, re.M | re.S)
     if not method:
         raise SystemExit("ERROR: editor onCreate changed")
-    anchor = "invoke-virtual {v0, v1}, Landroidx/appcompat/app/c;->setContentView(I)V"
+    anchor = ("invoke-static {p0}, Lcom/wowmancode/customfx/PreviewFpsUi;"
+              "->attach(Landroid/app/Activity;)V")
     body = method.group()
     if body.count(anchor) != 1:
         raise SystemExit("ERROR: editor Null button anchor changed")
