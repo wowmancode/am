@@ -98,6 +98,16 @@ jobs:
 
           echo '=== EDITACTIVITY LOW QUALITY NEARBY ==='
           grep -n -C 100 'getLowQualityPreview' "$EDIT_ACTIVITY" | head -500
+          echo '=== RENDER TRACE CALLBACKS ==='
+          for NAME in \
+            'SceneKt$renderWithGpu$1$1.smali' \
+            'SceneKt$renderWithGpu$1$10.smali' \
+            'b.smali'; do
+            FILE="$(find decoded -type f -path '*/t2/b.smali' -o -name "$NAME" | head -1)"
+            echo "=== $NAME :: $FILE ==="
+            if [ -n "$FILE" ]; then sed -n '1,1200p' "$FILE"; fi
+          done
+
           echo '=== PREVIEW SURFACE UPDATE CLASSES ==='
           for FILE in $(find decoded -type f -name 'EditActivity$w5.smali' -o -name 'MainActivity$s.smali'); do
             echo "=== $FILE ==="
