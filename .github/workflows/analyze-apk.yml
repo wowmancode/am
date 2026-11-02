@@ -89,6 +89,13 @@ jobs:
           print_method "$SETTINGS" 'getLowQualityPreview()Z'
           print_method "$SETTINGS" 'setLowQualityPreview(Z)V'
 
+          echo '=== EDITACTIVITY R0 LOW-QUALITY FLAG USES ==='
+          grep -n -C 70 'R0:' "$EDIT_ACTIVITY" | head -1800
+          echo '=== EDITACTIVITY G3 AND PREVIEW SURFACE SIZE METHODS ==='
+          for NAME in ' g3()V' 'updatePreviewSurface'; do
+            print_method "$EDIT_ACTIVITY" "$NAME"
+          done
+
           echo '=== EDITACTIVITY LOW QUALITY NEARBY ==='
           grep -n -C 100 'getLowQualityPreview' "$EDIT_ACTIVITY" | head -500
           echo '=== PREVIEW SURFACE UPDATE CLASSES ==='
