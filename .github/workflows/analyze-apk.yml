@@ -16,7 +16,7 @@ jobs:
       - name: Download APK from private release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download am --repo "$GITHUB_REPOSITORY" --pattern 'Alight.Motion.apk' --clobber
+        run: gh release download am-2 --repo "$GITHUB_REPOSITORY" --pattern 'Alight_Motion-*.apk' --clobber
 
       - name: Install analysis tools
         run: |
@@ -24,7 +24,41 @@ jobs:
           sudo apt-get install -y apktool unzip binutils file
 
       - name: Decode APK
-        run: apktool d -f Alight.Motion.apk -o decoded
+        run: APK="$(find . -maxdepth 1 -name '*.apk' -print -quit)"
+          apktool d -f "$APK" -o decoded
+
+      - name: Profile render configuration
+        shell: bash
+        run: |
+          set -e
+          echo '=== RENDER CLASSES ==='
+          find decoded -type f -path '*/smali*/*.smali' |
+            sed 's#^decoded/##' |
+            grep -Ei '(ScenePlayer|SceneKt|GLContext|Preview|Render|Resolution|Quality|Frame|Viewport)' |
+            sort | head -1200
+
+          echo '=== PREVIEW RESOLUTION AND QUALITY CONTROLS ==='
+          grep -RInaE --include='*.smali' \
+            '(Preview|preview).{0,60}(Scale|scale|Resolution|resolution|Quality|quality|Size|size|Width|width|Height|height)|(Scale|scale|Resolution|resolution|Quality|quality|Size|size|Width|width|Height|height).{0,60}(Preview|preview)|setViewport|glViewport|renderScale|PreviewScale|previewQuality' \
+            decoded/smali* | head -2500 || true
+
+          echo '=== RELEVANT METHOD SIGNATURES ==='
+          find decoded -type f -path '*/smali*/*.smali' |
+            grep -Ei '(ScenePlayer|SceneKt|GLContext|Preview|Render|Resolution|Quality)' |
+            while IFS= read -r file; do
+              grep -HnE '^\.method|^\.field' "$file"
+            done | head -5000 || true
+
+          for NAME in \
+            'ScenePlayer.smali' \
+            'ScenePlayer$2.smali' \
+            'ScenePlayer$renderFrame$2.smali' \
+            'GLContext.smali' \
+            'SceneKt.smali'; do
+            FILE="$(find decoded -type f -name "$NAME" -print -quit)"
+            echo "=== $NAME :: $FILE ==="
+            if [ -n "$FILE" ]; then sed -n '1,3000p' "$FILE"; fi
+          done
 
       - name: Build report
         shell: bash
