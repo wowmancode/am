@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='UTF-8' ?>
-<effect id="com.wowmancode.effects.bluredges" name="@string/name" desc="@string/desc" category="blur" tags="blur,soften,edge,raster,custom">
+<effect id="com.wowmancode.effects.bluredges" name="@string/name" desc="@string/desc" category="blur" tags="blur,soften,edge,raster,custom" thumb="thumb/blur_edges.webp">
     <strings><locale lang="en">
         <string name="name">Blur Edges</string>
         <string name="desc">Softens the outer edges of a layer while keeping the center sharp.</string>

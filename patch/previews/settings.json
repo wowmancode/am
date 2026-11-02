@@ -1,0 +1,106 @@
+{
+  "blur-edges.xml": {},
+  "fx-newblue-earthquake.xml": {},
+  "fx-newblue-wiggle-fun-house.xml": {},
+  "fx-newblue-wiggle.xml": {},
+  "fx-vegas-2d-shadow.xml": {
+    "uControl2": 0.6,
+    "uControl3": -0.6,
+    "uControl4": -2
+  },
+  "fx-vegas-border.xml": {
+    "uControl2": 0.2,
+    "uControl4": -0.6,
+    "uControl5": -1,
+    "uControl6": -0.2
+  },
+  "fx-vegas-channel-blend.xml": {
+    "uControl2": -1,
+    "uControl4": 1,
+    "uControl6": 1,
+    "uControl7": -1
+  },
+  "fx-vegas-color-corrector-secondary.xml": {
+    "uControl4": 0.4,
+    "uControl5": 0.3,
+    "uControl7": 0.2
+  },
+  "fx-vegas-color-corrector.xml": {
+    "uControl4": 0.575,
+    "uControl5": 1.3,
+    "uControl8": 0.3
+  },
+  "fx-vegas-color-curves.xml": {
+    "uControl3": -0.25,
+    "uControl8": 1.1
+  },
+  "fx-vegas-convolution-kernel.xml": {
+    "uControl2": 2,
+    "uControl3": -0.5,
+    "uControl4": -0.5,
+    "uControl5": -0.5,
+    "uControl6": -0.5
+  },
+  "fx-vegas-deform.xml": {
+    "uControl3": 1,
+    "uControl4": -0.7,
+    "uControl7": 0.5
+  },
+  "fx-vegas-glow.xml": {
+    "uControl2": 0.3,
+    "uControl3": 1.2,
+    "uControl4": 0.8
+  },
+  "fx-vegas-height-map.xml": {
+    "uControl2": 0.5,
+    "uControl3": 0.3,
+    "uControl5": -0.7
+  },
+  "fx-vegas-hsl-adjust.xml": {
+    "uControl2": 0.65,
+    "uControl3": 0.3
+  },
+  "fx-vegas-lab-adjust.xml": {
+    "uControl5": 1
+  },
+  "fx-vegas-light-rays.xml": {
+    "uControl2": 1.2,
+    "uControl3": 1,
+    "uControl4": -0.6,
+    "uControl5": 0.6
+  },
+  "fx-vegas-mirror.xml": {
+    "uControl2": 0.35,
+    "uControl3": 0.1
+  },
+  "fx-vegas-pinch-punch.xml": {
+    "uControl2": 1.7
+  },
+  "fx-vegas-radial-blur.xml": {
+    "uControl2": 0.8,
+    "uControl3": -0.3
+  },
+  "fx-vegas-spherize.xml": {},
+  "fx-vegas-starburst.xml": {
+    "uControl2": 1.4,
+    "uControl3": 0.2,
+    "uControl4": 1.2,
+    "uControl5": 0.4
+  },
+  "fx-vegas-swirl.xml": {
+    "uControl2": 0.6
+  },
+  "fx-vegas-unsharp-mask.xml": {
+    "uControl2": 1.1,
+    "uControl3": 0.7
+  },
+  "fx-vegas-wave.xml": {
+    "uControl2": -1,
+    "uControl3": -1.1,
+    "uControl4": -0.5,
+    "uControl5": -0.5
+  },
+  "gradient-map.xml": {},
+  "invert-flash.xml": {},
+  "tv-simulator.xml": {}
+}

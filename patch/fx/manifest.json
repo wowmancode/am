@@ -1,0 +1,363 @@
+{
+  "repository": "https://github.com/wowmancode/fx",
+  "branch": "codex/rollback-wave-spherize",
+  "commit": "05050c0380fa9d5418599be616692e073dd4f40b",
+  "filters": [
+    {
+      "source": "newblue_earthquake.glsl",
+      "name": "NewBlue Earthquake",
+      "category": "transform",
+      "description": "Animated shake, rotation, zoom, and occasional motion blur.",
+      "controls": [
+        "Mix",
+        "Magnitude",
+        "Velocity"
+      ]
+    },
+    {
+      "source": "newblue_wiggle.glsl",
+      "name": "NewBlue Wiggle",
+      "category": "distort",
+      "description": "Animated sine warp with stretch, replicate, and transparent edge modes.",
+      "controls": [
+        "Mix",
+        "Rate",
+        "Displacement",
+        "Drift",
+        "Edge Size",
+        "Edge Mode",
+        "Horizontal"
+      ]
+    },
+    {
+      "source": "newblue_wiggle_fun_house.glsl",
+      "name": "NewBlue Wiggle Fun House",
+      "category": "distort",
+      "description": "The Fun House preset with adjustable sine warp and edges.",
+      "controls": [
+        "Mix",
+        "Rate",
+        "Displacement",
+        "Drift",
+        "Edge Size",
+        "Edge Mode",
+        "Horizontal"
+      ]
+    },
+    {
+      "source": "vegas_2d_shadow.glsl",
+      "name": "Vegas 2D Shadow",
+      "category": "drawing",
+      "description": "A soft black shadow behind transparent areas of the layer.",
+      "controls": [
+        "Mix",
+        "Position X",
+        "Position Y",
+        "Blur",
+        "Intensity",
+        "Shadow Opacity",
+        "Scale",
+        "Rotation"
+      ]
+    },
+    {
+      "source": "vegas_border.glsl",
+      "name": "Vegas Border",
+      "category": "drawing",
+      "description": "An inset border with adjustable color and optional bevel shading.",
+      "controls": [
+        "Mix",
+        "Size",
+        "Light Angle",
+        "Border Red",
+        "Border Green",
+        "Border Blue",
+        "Bevel"
+      ]
+    },
+    {
+      "source": "vegas_channel_blend.glsl",
+      "name": "Vegas Channel Blend",
+      "category": "color",
+      "description": "Mixes RGB channels with optional row normalization.",
+      "controls": [
+        "Mix",
+        "Red from Red",
+        "Red from Green",
+        "Red from Blue",
+        "Green from Green",
+        "Blue from Red",
+        "Blue from Blue",
+        "Normalize Rows"
+      ]
+    },
+    {
+      "source": "vegas_color_corrector.glsl",
+      "name": "Vegas Color Corrector",
+      "category": "color",
+      "description": "Adjusts low, mid, and high chroma wheels and saturation.",
+      "controls": [
+        "Mix",
+        "Low Hue",
+        "Low Radius",
+        "Mid Hue",
+        "Mid Radius",
+        "High Hue",
+        "High Radius",
+        "Saturation"
+      ]
+    },
+    {
+      "source": "vegas_color_corrector_secondary.glsl",
+      "name": "Vegas Color Corrector Secondary",
+      "category": "color",
+      "description": "Selects a hue range for hue, saturation, and luminance correction.",
+      "controls": [
+        "Mix",
+        "Hue Center",
+        "Hue Width",
+        "Hue Rotation",
+        "Saturation",
+        "Gamma",
+        "Gain",
+        "Offset"
+      ]
+    },
+    {
+      "source": "vegas_color_curves.glsl",
+      "name": "Vegas Color Curves",
+      "category": "color",
+      "description": "Adjusts fixed shadow, midtone, and highlight curve points.",
+      "controls": [
+        "Mix",
+        "Shadows",
+        "Midtones",
+        "Highlights",
+        "Red Midpoint",
+        "Green Midpoint",
+        "Blue Midpoint",
+        "Contrast"
+      ]
+    },
+    {
+      "source": "vegas_convolution_kernel.glsl",
+      "name": "Vegas Convolution Kernel",
+      "category": "blur",
+      "description": "A cross-shaped convolution kernel with scale and offset controls.",
+      "controls": [
+        "Mix",
+        "Center",
+        "North",
+        "West",
+        "East",
+        "South",
+        "Scale",
+        "Offset"
+      ]
+    },
+    {
+      "source": "vegas_deform.glsl",
+      "name": "Vegas Deform",
+      "category": "distort",
+      "description": "Scales each side of the image and applies horizontal and vertical shear.",
+      "controls": [
+        "Mix",
+        "Amount",
+        "Left",
+        "Right",
+        "Top",
+        "Bottom",
+        "Shear X",
+        "Shear Y"
+      ]
+    },
+    {
+      "source": "vegas_glow.glsl",
+      "name": "Vegas Glow",
+      "category": "blur",
+      "description": "Spreads bright areas into a tinted glow.",
+      "controls": [
+        "Mix",
+        "Radius",
+        "Intensity",
+        "Suppression",
+        "Tint Red",
+        "Tint Green",
+        "Tint Blue"
+      ]
+    },
+    {
+      "source": "vegas_height_map.glsl",
+      "name": "Vegas Height Map",
+      "category": "distort",
+      "description": "Uses the layer as both the height source and displaced image.",
+      "controls": [
+        "Mix",
+        "Amplitude",
+        "Elevation",
+        "Height Scale",
+        "Smoothness",
+        "Invert Height",
+        "Source Channel"
+      ]
+    },
+    {
+      "source": "vegas_hsl_adjust.glsl",
+      "name": "Vegas HSL Adjust",
+      "category": "color",
+      "description": "Adjusts hue, saturation, and luminance.",
+      "controls": [
+        "Mix",
+        "Hue",
+        "Saturation",
+        "Luminance"
+      ]
+    },
+    {
+      "source": "vegas_lab_adjust.glsl",
+      "name": "Vegas LAB Adjust",
+      "category": "color",
+      "description": "Adjusts Lab lightness and chroma, with luminance inversion and desaturation.",
+      "controls": [
+        "Mix",
+        "Lightness",
+        "Channel A",
+        "Channel B",
+        "Invert Luminance",
+        "Desaturate"
+      ]
+    },
+    {
+      "source": "vegas_light_rays.glsl",
+      "name": "Vegas Light Rays",
+      "category": "blur",
+      "description": "Draws rays from bright pixels toward a movable light source.",
+      "controls": [
+        "Mix",
+        "Power",
+        "Sensitivity",
+        "Light X",
+        "Light Y",
+        "Radius X",
+        "Radius Y",
+        "Blend"
+      ]
+    },
+    {
+      "source": "vegas_mirror.glsl",
+      "name": "Vegas Mirror",
+      "category": "distort",
+      "description": "Reflects one side across a movable axis with a background color.",
+      "controls": [
+        "Mix",
+        "Angle",
+        "Center X",
+        "Center Y",
+        "Background Red",
+        "Background Green",
+        "Background Blue"
+      ]
+    },
+    {
+      "source": "vegas_pinch_punch.glsl",
+      "name": "Vegas Pinch Punch",
+      "category": "distort",
+      "description": "Pinches or expands an elliptical region around a movable center.",
+      "controls": [
+        "Mix",
+        "Amount",
+        "Center X",
+        "Center Y",
+        "Scale X",
+        "Scale Y",
+        "Unlink Axes"
+      ]
+    },
+    {
+      "source": "vegas_radial_blur.glsl",
+      "name": "Vegas Radial Blur",
+      "category": "blur",
+      "description": "Blurs along radial lines with a movable center and constant-length option.",
+      "controls": [
+        "Mix",
+        "Amount",
+        "Center X",
+        "Center Y",
+        "Constant Length"
+      ]
+    },
+    {
+      "source": "vegas_spherize.glsl",
+      "name": "Vegas Spherize",
+      "category": "distort",
+      "description": "A cosine radial warp that bulges or contracts a centered region.",
+      "controls": [
+        "Mix",
+        "Amount",
+        "Center X",
+        "Center Y",
+        "Scale X",
+        "Scale Y",
+        "Unlink Axes"
+      ]
+    },
+    {
+      "source": "vegas_starburst.glsl",
+      "name": "Vegas Starburst",
+      "category": "blur",
+      "description": "Adds sampled rays around bright areas. Raise Star Intensity to see the rays.",
+      "controls": [
+        "Mix",
+        "Threshold",
+        "Brilliance",
+        "Star Intensity",
+        "Radius",
+        "Points",
+        "Center Burst",
+        "Orientation"
+      ]
+    },
+    {
+      "source": "vegas_swirl.glsl",
+      "name": "Vegas Swirl",
+      "category": "distort",
+      "description": "Twists an elliptical region around a movable center.",
+      "controls": [
+        "Mix",
+        "Amount",
+        "Center X",
+        "Center Y",
+        "Scale X",
+        "Scale Y",
+        "Unlink Axes"
+      ]
+    },
+    {
+      "source": "vegas_unsharp_mask.glsl",
+      "name": "Vegas Unsharp Mask",
+      "category": "blur",
+      "description": "Sharpens or softens detail. Raise Amount and Radius to apply the effect.",
+      "controls": [
+        "Mix",
+        "Amount",
+        "Radius",
+        "Threshold"
+      ]
+    },
+    {
+      "source": "vegas_wave.glsl",
+      "name": "Vegas Wave",
+      "category": "distort",
+      "description": "A horizontal and vertical sine displacement with adjustable phases.",
+      "controls": [
+        "Mix",
+        "Vertical Waves",
+        "Horizontal Waves",
+        "Vertical Amplitude",
+        "Horizontal Amplitude",
+        "Vertical Phase",
+        "Horizontal Phase"
+      ]
+    }
+  ]
+}
