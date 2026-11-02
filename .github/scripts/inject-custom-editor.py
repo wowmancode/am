@@ -389,7 +389,7 @@ def patch_complex_scene_performance(decoded: Path) -> None:
             if last < 0:
                 raise SystemExit("ERROR: render diagnostic callback terminator changed")
             body = body[:first] + "    " + log_marker + "\n" + body[last + len(end):]
-    if "Lt2/b;->h(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;)V" in body:
+    if any(start in body for start, _ in callbacks):
         raise SystemExit("ERROR: render diagnostic callback removal is incomplete")
     if "large_bg_watermark" in body or "Lcom/google/firebase/remoteconfig/g;->i()" in body:
         raise SystemExit("ERROR: per-frame remote-config read removal is incomplete")
