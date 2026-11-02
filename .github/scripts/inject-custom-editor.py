@@ -35,6 +35,9 @@ is reassembled. It:
     The build derives the list from the APK's LicenseBenefit enum, so graph
     and all other native benefit gates share the exhaustive entitlement set.
 
+11. Adds a Null button that groups selected layers into a native scene-backed
+    transform parent, using the app's own grouping, scene update, and undo APIs.
+
 The editor is a dialog over the effect browser rather than its own activity,
 so the manifest does not change. Its HTML page is added to the APK's assets
 by add-effects.py.
@@ -402,6 +405,29 @@ def patch_complex_scene_performance(decoded: Path) -> None:
           file=sys.stderr)
 
 
+def patch_null_layer(decoded: Path) -> None:
+    path = find_one(decoded, "EditActivity.smali")
+    text = path.read_text(encoding="utf-8")
+    marker = "# Add a native project-backed Null transform parent to the editor."
+    if marker in text:
+        return
+    method = re.search(
+        r"^\.method protected onCreate\(Landroid/os/Bundle;\)V\n.*?^\.end method",
+        text, re.M | re.S)
+    if not method:
+        raise SystemExit("ERROR: editor onCreate changed")
+    anchor = "invoke-virtual {v0, v1}, Landroidx/appcompat/app/c;->setContentView(I)V"
+    body = method.group()
+    if body.count(anchor) != 1:
+        raise SystemExit("ERROR: editor Null button anchor changed")
+    hook = ("\n\n    " + marker + "\n"
+            "    invoke-static {p0}, Lcom/wowmancode/customfx/NullLayerUi;"
+            "->attach(Landroid/app/Activity;)V")
+    body = body.replace(anchor, anchor + hook)
+    path.write_text(text[:method.start()] + body + text[method.end():], encoding="utf-8")
+    print("  Added native Null layer control to the editor", file=sys.stderr)
+
+
 def patch_export_rendering(decoded: Path) -> None:
     codec = find_one(decoded, "MediaCodecExportContext.smali")
     exporter = find_one(decoded, "SceneExporter.smali")
@@ -544,6 +570,7 @@ def main() -> None:
     patch_scene_overlay(decoded)
     patch_native_preview(decoded)
     patch_complex_scene_performance(decoded)
+    patch_null_layer(decoded)
     patch_export_rendering(decoded)
     patch_license_benefits(decoded)
     subprocess.run([sys.executable, str(Path(__file__).with_name("inject-transform3d.py")),

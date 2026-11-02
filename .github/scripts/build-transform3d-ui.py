@@ -36,7 +36,10 @@ METHODS = {
     'i1/z': set(), 'i1/v': {'<init>','b','c'},
     'n2/a': {'a','b','c','d','e','get'},
     'n2/f': {'b'},
-    'l1/e': {'z','t','w','o','p','c'},
+    'SceneHolder': {'getScene','getSelection','setScene'},
+    'SceneSelection': {'getSelectedElements'},
+    'ElementGroupingKt': {'groupElementsById$default'},
+    'l1/e': {'z','t','w','o','p','c','u'},
 }
 PRIMITIVES = {'V':'void','Z':'boolean','B':'byte','S':'short','I':'int','J':'long','F':'float','D':'double','C':'char'}
 
@@ -120,7 +123,7 @@ def compile_ui(decoded, destination):
             'static SceneElement rotation(SceneElement element, Keyable rotation) {return '+rotation_copy+';}\n}')
         classpath=os.pathsep.join(str(cache/n) for n in ('android.jar','kotlin.jar'))
         subprocess.run(['java','-m','jdk.compiler/com.sun.tools.javac.Main','-source','8','-target','8','-Xlint:-options','-classpath',classpath,'-d',str(classes),*[str(p) for p in stubs.rglob('*.java')]],check=True)
-        subprocess.run(['java','-m','jdk.compiler/com.sun.tools.javac.Main','-source','8','-target','8','-Xlint:-options','-classpath',classpath+os.pathsep+str(classes),'-d',str(helper),str(native),str(ROOT/'patch/java/com/wowmancode/customfx/Transform3dUi.java')],check=True)
+        subprocess.run(['java','-m','jdk.compiler/com.sun.tools.javac.Main','-source','8','-target','8','-Xlint:-options','-classpath',classpath+os.pathsep+str(classes),'-d',str(helper),str(native),str(ROOT/'patch/java/com/wowmancode/customfx/Transform3dUi.java'),str(ROOT/'patch/java/com/wowmancode/customfx/NullLayerUi.java')],check=True)
         dex=work/'dex';dex.mkdir()
         subprocess.run(['java','-cp',str(cache/'r8.jar'),'com.android.tools.r8.D8','--min-api','21','--lib',str(cache/'android.jar'),'--classpath',str(classes),'--classpath',str(cache/'kotlin.jar'),'--output',str(dex),*[str(p) for p in helper.rglob('*.class')]],check=True)
         smali=work/'smali'
@@ -131,7 +134,7 @@ def compile_ui(decoded, destination):
         import shutil
         for p in smali.rglob('*.smali'):
             target=destination/p.relative_to(smali);target.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(p,target)
-        print('  Compiled 3D transform UI helpers against the native APK API',file=sys.stderr)
+        print('  Compiled native transform and Null-layer UI helpers against the APK API',file=sys.stderr)
 
 
 if __name__=='__main__':compile_ui(Path(sys.argv[1]),Path(sys.argv[2]))

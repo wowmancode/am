@@ -8,7 +8,7 @@ from pathlib import Path
 def check(decoded):
     index={str(p.relative_to(base))[:-6]:p for base in decoded.glob('smali*')
            if base.is_dir() for p in base.rglob('*.smali')}
-    helpers=[p for name,p in index.items() if name.startswith('com/wowmancode/customfx/Transform3d')]
+    helpers=[p for name,p in index.items() if name.startswith(('com/wowmancode/customfx/Transform3d','com/wowmancode/customfx/NullLayerUi'))]
     assert len(helpers)>=9, 'missing compiled 3D helpers'
     count=0
     for path in helpers:

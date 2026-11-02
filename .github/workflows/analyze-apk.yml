@@ -16,7 +16,7 @@ jobs:
       - name: Download APK from private release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download am-2 --repo "$GITHUB_REPOSITORY" --pattern 'Alight_Motion-*.apk' --clobber
+        run: gh release download am --repo "$GITHUB_REPOSITORY" --pattern 'Alight.Motion.apk' --clobber
 
       - name: Install analysis tools
         run: |
@@ -24,35 +24,7 @@ jobs:
           sudo apt-get install -y apktool unzip binutils file
 
       - name: Decode APK
-        run: apktool d -f Alight_Motion-*.apk -o decoded
-
-      - name: Inspect exact grouping implementation
-        shell: bash
-        run: |
-          set -e
-          echo '=== GROUP LAMBDA W3 ==='
-          W3="$(find decoded -type f -name 'EditActivity$w3.smali' -print -quit)"
-          sed -n '1,500p' "$W3"
-          echo '=== OTHER GROUP LAMBDAS ==='
-          for FILE in $(find decoded -type f \( -name 'EditActivity$w2.smali' -o -name 'EditActivity$w4.smali' \) | sort); do
-            echo "=== $FILE ==="; sed -n '1,500p' "$FILE";
-          done
-          echo '=== EDITACTIVITY GROUP CALL CONTEXT ==='
-          EDIT="$(find decoded -type f -name 'EditActivity.smali' -print -quit)"
-          LINE="$(grep -n 'ElementGroupingKt;->groupElementsById' "$EDIT" | head -1 | cut -d: -f1)"
-          sed -n "$((LINE-180)),$((LINE+180))p" "$EDIT"
-          echo '=== SCENE SELECTION METHODS ==='
-          SELECTION="$(find decoded -type f -name 'SceneSelection.smali' -print -quit)"
-          grep -nE '^\.field|^\.method' "$SELECTION" | head -400
-          echo '=== HELPER METHODS ==='
-          HELPER="$(find decoded -type f -path '*/l1/e.smali' -print -quit)"
-          grep -nE '^\.method' "$HELPER" | head -500
-          echo '=== NESTED SCENE FACTORY ==='
-          NESTED="$(find decoded -type f -name 'NestedSceneElementKt.smali' -print -quit)"
-          grep -nE '^\.method' "$NESTED" | head -200
-          echo '=== GROUP BOUNDS MODE ==='
-          MODE="$(find decoded -type f -name 'GroupBoundsMode.smali' -print -quit)"
-          grep -nE '^\.field|^\.method' "$MODE"
+        run: apktool d -f Alight.Motion.apk -o decoded
 
       - name: Build report
         shell: bash
