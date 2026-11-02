@@ -36,9 +36,9 @@ METHODS = {
     'i1/z': set(), 'i1/v': {'<init>','b','c'},
     'n2/a': {'a','b','c','d','e','get'},
     'n2/f': {'b'},
-    'SceneHolder': {'getScene','getSelection','setScene'},
-    'SceneSelection': {'getSelectedElements'},
-    'ElementGroupingKt': {'groupElementsById$default'},
+    SCENE+'SceneHolder': {'getScene','getSelection','setScene'},
+    SCENE+'SceneSelection': {'getSelectedElements'},
+    SCENE+'ElementGroupingKt': {'groupElementsById$default'},
     'l1/e': {'z','t','w','o','p','c','u'},
 }
 PRIMITIVES = {'V':'void','Z':'boolean','B':'byte','S':'short','I':'int','J':'long','F':'float','D':'double','C':'char'}
