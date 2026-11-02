@@ -36,10 +36,10 @@ METHODS = {
     'i1/z': set(), 'i1/v': {'<init>','b','c'},
     'n2/a': {'a','b','c','d','e','get'},
     'n2/f': {'b'},
-    SCENE+'SceneHolder': {'getScene','getSelection','setScene'},
+    SCENE+'SceneHolder': {'getScene','getSelection','setScene','update'},
     SCENE+'SceneSelection': {'getSelectedElements'},
-    SCENE+'ElementGroupingKt': {'groupElementsById$default'},
-    'l1/e': {'z','t','w','o','p','c','u'},
+    SCENE+'ElementGroupingKt': {'groupElementsById$default','groupElementsById'},
+    'l1/e': {'z','t','w','o','p','c','u','a'},
 }
 PRIMITIVES = {'V':'void','Z':'boolean','B':'byte','S':'short','I':'int','J':'long','F':'float','D':'double','C':'char'}
 
@@ -101,6 +101,8 @@ def compile_ui(decoded, destination):
             if cls==SCENE+'Keyable':kind='interface'
             if cls==SCENE+'animators/AnimatorOf':
                 kind='enum';lines=['Float, Rotate;']
+            if cls==SCENE+'GroupBoundsMode':
+                kind='enum';lines=['AUTO, MATCH_SCENE, UNION_ELEMENTS_SCENE, WRAP_ELEMENTS;']
             path=stubs/(cls+'.java');path.parent.mkdir(parents=True,exist_ok=True)
             path.write_text('package '+cls.rsplit('/',1)[0].replace('/','.')+';\npublic '+kind+' '+cls.rsplit('/',1)[-1]+parent+' {\n'+'\n'.join(lines)+'\n}')
         # The native undo transaction is a nested interface.
