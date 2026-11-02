@@ -323,6 +323,102 @@ def patch_native_preview(decoded: Path) -> None:
     print("  Optimized the live preview loop and added optional Preview FPS", file=sys.stderr)
 
 
+def patch_complex_scene_performance(decoded: Path) -> None:
+    editor = find_one(decoded, "EditActivity.smali")
+    text = editor.read_text(encoding="utf-8")
+    marker = "# Always use half-resolution GPU previews for complex scenes."
+    if marker not in text:
+        legacy = re.compile(
+            r"    invoke-virtual \{v0\}, Lcom/alightcreative/app/motion/persist/a;"
+            r"->getLowQualityPreview\(\)Z\n"
+            r"(?:    \.line \d+\n)?    move-result v0\n"
+            r"    iput-boolean v0, p0, Lcom/alightcreative/app/motion/activities/"
+            r"EditActivity;->R0:Z")
+        replacement = (
+            "    " + marker + "\n"
+            "    const/4 v0, 0x1\n"
+            "    iput-boolean v0, p0, Lcom/alightcreative/app/motion/activities/"
+            "EditActivity;->R0:Z")
+        text, count = legacy.subn(replacement, text)
+        if count != 1:
+            raise SystemExit("ERROR: edit preview quality initialization changed")
+        editor.write_text(text, encoding="utf-8")
+
+    scene = find_one(decoded, "SceneKt.smali")
+    text = scene.read_text(encoding="utf-8")
+    method = re.search(
+        r"^\.method public static final renderWithGpu\([^\n]*\n.*?^\.end method",
+        text, re.M | re.S)
+    if not method:
+        raise SystemExit("ERROR: scene GPU renderer changed")
+    body = method.group()
+
+    remote_marker = "# The watermark remote-config result was unused on every preview frame."
+    if remote_marker not in body:
+        remote = re.compile(
+            r"    invoke-static \{\}, Lcom/google/firebase/remoteconfig/g;->i\(\)"
+            r"Lcom/google/firebase/remoteconfig/g;\n"
+            r"\s*move-result-object v1\n"
+            r"    const-string v2, \"large_bg_watermark\"\n"
+            r"    invoke-virtual \{v1, v2\}, Lcom/google/firebase/remoteconfig/g;"
+            r"->g\(Ljava/lang/String;\)Z\n")
+        body, count = remote.subn("    " + remote_marker + "\n", body)
+        if count != 1:
+            raise SystemExit("ERROR: per-frame watermark remote-config read changed")
+
+    log_marker = "# Per-frame scene diagnostic callbacks omitted."
+    callbacks = (
+        ("    new-instance v5, Lcom/alightcreative/app/motion/scene/"
+         "SceneKt$renderWithGpu$1$1;\n",
+         "    invoke-static {v0, v13}, Lt2/b;->h(Ljava/lang/Object;"
+         "Lkotlin/jvm/functions/Function0;)V\n"),
+        ("    new-instance v1, Lcom/alightcreative/app/motion/scene/"
+         "SceneKt$renderWithGpu$1$10;\n",
+         "    invoke-static {v0, v1}, Lt2/b;->h(Ljava/lang/Object;"
+         "Lkotlin/jvm/functions/Function0;)V\n"),
+    )
+    if body.count(log_marker) != 1:
+        for start, end in callbacks:
+            first = body.find(start)
+            if first < 0:
+                raise SystemExit("ERROR: render diagnostic callback changed")
+            last = body.find(end, first)
+            if last < 0:
+                raise SystemExit("ERROR: render diagnostic callback terminator changed")
+            body = body[:first] + "    " + log_marker + "\n" + body[last + len(end):]
+    if "Lt2/b;->h(Ljava/lang/Object;Lkotlin/jvm/functions/Function0;)V" in body:
+        raise SystemExit("ERROR: render diagnostic callback removal is incomplete")
+    if "large_bg_watermark" in body or "Lcom/google/firebase/remoteconfig/g;->i()" in body:
+        raise SystemExit("ERROR: per-frame remote-config read removal is incomplete")
+    text = text[:method.start()] + body + text[method.end():]
+    scene.write_text(text, encoding="utf-8")
+
+    player = find_one(decoded, "ScenePlayer$2.smali")
+    text = player.read_text(encoding="utf-8")
+    selection_marker = "# Hide editor-only selection overlays while playback is running."
+    if selection_marker not in text:
+        selection_anchor = (
+            "    move-object/from16 v32, v0\n\n"
+            "    .line 44\n")
+        if text.count(selection_anchor) != 1:
+            raise SystemExit("ERROR: preview selection setup changed")
+        selection_hook = (
+            selection_anchor
+            + "    " + selection_marker + "\n"
+            "    sget-object v0, Lcom/alightcreative/app/motion/scene/RenderMode;"
+            "->PLAY:Lcom/alightcreative/app/motion/scene/RenderMode;\n"
+            "    if-ne v31, v0, :customperf_keep_selection\n"
+            "    sget-object v0, Lcom/alightcreative/app/motion/scene/SceneKt;"
+            "->EMPTY_SCENE_SELECTION:Lcom/alightcreative/app/motion/scene/SceneSelection;\n"
+            "    move-object/from16 v32, v0\n"
+            "    :customperf_keep_selection\n")
+        text = text.replace(selection_anchor, selection_hook)
+        player.write_text(text, encoding="utf-8")
+
+    print("  Forced half-size preview rendering and removed preview hot-path work",
+          file=sys.stderr)
+
+
 def patch_export_rendering(decoded: Path) -> None:
     codec = find_one(decoded, "MediaCodecExportContext.smali")
     exporter = find_one(decoded, "SceneExporter.smali")
@@ -464,6 +560,7 @@ def main() -> None:
     patch_effect_number_edit(decoded)
     patch_scene_overlay(decoded)
     patch_native_preview(decoded)
+    patch_complex_scene_performance(decoded)
     patch_export_rendering(decoded)
     patch_license_benefits(decoded)
     subprocess.run([sys.executable, str(Path(__file__).with_name("inject-transform3d.py")),

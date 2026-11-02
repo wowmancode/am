@@ -1,5 +1,23 @@
 # Preview and export performance
 
+## Complex-scene preview mode
+
+Complex scenes now use the app's low-quality render surface unconditionally.
+That surface halves both preview dimensions, reducing fragment-shader and layer
+work to roughly one quarter of the normal pixel count. The SurfaceView scales
+the result to the editor viewport. Project export continues to use its original
+full-resolution path and settings.
+
+The preview hot path also skips editor-only selection overlays while playback
+is running; they return when paused or seeking. It removes an ignored Firebase
+Remote Config watermark lookup performed once per scene render, and removes two
+per-frame diagnostic callback allocations. These changes reduce CPU submission
+and garbage-collection pressure in addition to GPU fragment work.
+
+The half-size preview intentionally trades editor sharpness for playback FPS.
+Numeric controls, keyframes, effects, project data, preview/export rendering
+semantics, and final export resolution are unchanged.
+
 These changes affect the Alight Motion editor canvas and timeline playback.
 
 - Skip the per-frame scene traversal used only to attach statistics to Firebase performance traces, and disable those preview traces.

@@ -16,7 +16,7 @@ jobs:
       - name: Download APK from private release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download am-2 --repo "$GITHUB_REPOSITORY" --pattern 'Alight_Motion-*.apk' --clobber
+        run: gh release download am --repo "$GITHUB_REPOSITORY" --pattern 'Alight.Motion.apk' --clobber
 
       - name: Install analysis tools
         run: |
@@ -24,95 +24,7 @@ jobs:
           sudo apt-get install -y apktool unzip binutils file
 
       - name: Decode APK
-        run: apktool d -f Alight_Motion-*.apk -o decoded
-
-      - name: Profile render configuration
-        shell: bash
-        run: |
-          set -e
-          echo '=== RENDER CLASSES ==='
-          find decoded -type f -path '*/smali*/*.smali' |
-            sed 's#^decoded/##' |
-            grep -Ei '(ScenePlayer|SceneKt|GLContext|Preview|Render|Resolution|Quality|Frame|Viewport)' |
-            sort | head -1200
-
-          echo '=== PREVIEW RESOLUTION AND QUALITY CONTROLS ==='
-          grep -RInaE --include='*.smali' \
-            '(Preview|preview).{0,60}(Scale|scale|Resolution|resolution|Quality|quality|Size|size|Width|width|Height|height)|(Scale|scale|Resolution|resolution|Quality|quality|Size|size|Width|width|Height|height).{0,60}(Preview|preview)|setViewport|glViewport|renderScale|PreviewScale|previewQuality' \
-            decoded/smali* | head -2500 || true
-
-          echo '=== RELEVANT METHOD SIGNATURES ==='
-          find decoded -type f -path '*/smali*/*.smali' |
-            grep -Ei '(ScenePlayer|SceneKt|GLContext|Preview|Render|Resolution|Quality)' |
-            while IFS= read -r file; do
-              grep -HnE '^\.method|^\.field' "$file"
-            done | head -5000 || true
-
-          for NAME in \
-            'ScenePlayer.smali' \
-            'ScenePlayer$2.smali' \
-            'ScenePlayer$renderFrame$2.smali' \
-            'GLContext.smali' \
-            'SceneKt.smali'; do
-            FILE="$(find decoded -type f -name "$NAME" -print -quit)"
-            echo "=== $NAME :: $FILE ==="
-            if [ -n "$FILE" ]; then sed -n '1,3000p' "$FILE"; fi
-          done
-
-      - name: Inspect preview sizing internals
-        shell: bash
-        run: |
-          set -e
-          print_method() {
-            local file="$1" name="$2"
-            echo "=== METHOD $name :: $file ==="
-            awk -v start=".method" -v name="$name" '
-              index($0,".method ") == 1 && index($0,name) {
-                printing=1
-              }
-              printing { print }
-              printing && $0 == ".end method" { exit }
-            ' "$file"
-          }
-
-          SCENE_PLAYER="$(find decoded -type f -name 'ScenePlayer.smali' -print -quit)"
-          SCENE_KT="$(find decoded -type f -name 'SceneKt.smali' -print -quit)"
-          GL_CONTEXT="$(find decoded -type f -name 'GLContext.smali' -print -quit)"
-          EDIT_ACTIVITY="$(find decoded -type f -name 'EditActivity.smali' -print -quit)"
-          SETTINGS="$(find decoded -type f -path '*/com/alightcreative/app/motion/persist/a.smali' -print -quit)"
-
-          print_method "$SCENE_KT" 'renderWithGpu('
-          print_method "$SCENE_KT" 'renderWithGpu$default('
-          print_method "$GL_CONTEXT" ' E()I'
-          print_method "$GL_CONTEXT" ' F()I'
-          print_method "$GL_CONTEXT" ' l0()I'
-          print_method "$SETTINGS" 'getLowQualityPreview()Z'
-          print_method "$SETTINGS" 'setLowQualityPreview(Z)V'
-
-          echo '=== EDITACTIVITY R0 LOW-QUALITY FLAG USES ==='
-          grep -n -C 70 'R0:' "$EDIT_ACTIVITY" | head -1800
-          echo '=== EDITACTIVITY G3 AND PREVIEW SURFACE SIZE METHODS ==='
-          for NAME in ' g3()V' 'updatePreviewSurface'; do
-            print_method "$EDIT_ACTIVITY" "$NAME"
-          done
-
-          echo '=== EDITACTIVITY LOW QUALITY NEARBY ==='
-          grep -n -C 100 'getLowQualityPreview' "$EDIT_ACTIVITY" | head -500
-          echo '=== RENDER TRACE CALLBACKS ==='
-          for NAME in \
-            'SceneKt$renderWithGpu$1$1.smali' \
-            'SceneKt$renderWithGpu$1$10.smali' \
-            'b.smali'; do
-            FILE="$(find decoded -type f -path '*/t2/b.smali' -o -name "$NAME" | head -1)"
-            echo "=== $NAME :: $FILE ==="
-            if [ -n "$FILE" ]; then sed -n '1,1200p' "$FILE"; fi
-          done
-
-          echo '=== PREVIEW SURFACE UPDATE CLASSES ==='
-          for FILE in $(find decoded -type f -name 'EditActivity$w5.smali' -o -name 'MainActivity$s.smali'); do
-            echo "=== $FILE ==="
-            sed -n '1,1200p' "$FILE"
-          done
+        run: apktool d -f Alight.Motion.apk -o decoded
 
       - name: Build report
         shell: bash
