@@ -24,8 +24,7 @@ jobs:
           sudo apt-get install -y apktool unzip binutils file
 
       - name: Decode APK
-        run: APK="$(find . -maxdepth 1 -name '*.apk' -print -quit)"
-          apktool d -f "$APK" -o decoded
+        run: apktool d -f Alight_Motion-*.apk -o decoded
 
       - name: Profile render configuration
         shell: bash
