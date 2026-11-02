@@ -16,7 +16,7 @@ jobs:
       - name: Download APK from private release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download am --repo "$GITHUB_REPOSITORY" --pattern 'Alight.Motion.apk' --clobber
+        run: gh release download am-2 --repo "$GITHUB_REPOSITORY" --pattern 'Alight_Motion-*.apk' --clobber
 
       - name: Install analysis tools
         run: |
@@ -24,7 +24,48 @@ jobs:
           sudo apt-get install -y apktool unzip binutils file
 
       - name: Decode APK
-        run: apktool d -f Alight.Motion.apk -o decoded
+        run: apktool d -f Alight_Motion-*.apk -o decoded
+
+      - name: Inspect null and parent layer support
+        shell: bash
+        run: |
+          set -e
+          echo '=== USER-FACING NULL/PARENT/LINK STRINGS ==='
+          grep -RInaiE 'null.?layer|parent|link|constraint|follow|attach|empty.?layer|group' decoded/res/values*/strings.xml | head -1200 || true
+
+          echo '=== SMALI STRING CONSTANTS ==='
+          grep -RInaiE --include='*.smali' '"[^"]*(null|parent|link|constraint|follow|attach|group)[^"]*"' decoded/smali* | head -1600 || true
+
+          echo '=== CANDIDATE CLASSES ==='
+          find decoded -type f -path '*/smali*/*.smali' |
+            sed 's#^decoded/##' |
+            grep -Ei '(Null|Parent|Link|Follow|Constraint|Attach|Group|ElementType|LayerType)' |
+            sort | head -1600
+
+          echo '=== SCENE ELEMENT FIELDS AND METHODS ==='
+          for NAME in \
+            'SceneElement.smali' \
+            'SceneElementType.smali' \
+            'SceneType.smali' \
+            'ElementType.smali' \
+            'SceneElementTypeImpl.smali'; do
+            FILE="$(find decoded -type f -name "$NAME" -print -quit)"
+            echo "=== $NAME :: $FILE ==="
+            if [ -n "$FILE" ]; then grep -nE '^\.field|^\.method' "$FILE"; fi
+          done
+
+          echo '=== LINK/PARENT METHOD SIGNATURES ==='
+          find decoded -type f -path '*/smali*/*.smali' |
+            grep -Ei '(Parent|Link|Follow|Constraint|Attach|Group)' |
+            while IFS= read -r file; do
+              grep -HnE '^\.method|^\.field' "$file"
+            done | head -3000 || true
+
+          echo '=== ADD-LAYER UI CLASSES ==='
+          find decoded -type f -path '*/smali*/*.smali' |
+            sed 's#^decoded/##' |
+            grep -Ei '(AddLayer|LayerAdd|AddElement|ElementAdd|PickLayer|LayerPicker|AddMenu|ProjectEditor|EditorMenu)' |
+            sort | head -1000
 
       - name: Build report
         shell: bash
