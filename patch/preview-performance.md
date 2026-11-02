@@ -8,11 +8,10 @@ work to roughly one quarter of the normal pixel count. The SurfaceView scales
 the result to the editor viewport. Project export continues to use its original
 full-resolution path and settings.
 
-The preview hot path also skips editor-only selection overlays while playback
-is running; they return when paused or seeking. It removes an ignored Firebase
-Remote Config watermark lookup performed once per scene render, and removes two
-per-frame diagnostic callback allocations. These changes reduce CPU submission
-and garbage-collection pressure in addition to GPU fragment work.
+The preview hot path also removes an ignored Firebase Remote Config watermark
+lookup performed once per scene render and two per-frame diagnostic callback
+allocations. These changes reduce CPU submission and garbage-collection pressure
+in addition to GPU fragment work. Native selection controls remain enabled.
 
 The half-size preview intentionally trades editor sharpness for playback FPS.
 Numeric controls, keyframes, effects, project data, preview/export rendering
