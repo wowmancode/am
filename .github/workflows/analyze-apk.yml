@@ -30,6 +30,16 @@ jobs:
         shell: bash
         run: |
           set -e
+          echo '=== GROUP API CALL SITES ==='
+          grep -RInaE --include='*.smali' 'ElementGroupingKt;->(groupElements|groupElementsById)' decoded/smali* | head -400 || true
+          echo '=== GROUP CALL CONTEXT ==='
+          while IFS=: read -r file line rest; do
+            echo "===== $file:$line ====="
+            sed -n "$((line-100)),$((line+140))p" "$file"
+          done < <(grep -RInaE --include='*.smali' 'ElementGroupingKt;->groupElements' decoded/smali* | head -20 || true)
+          echo '=== UNDO AND SCENE MUTATION HELPERS ==='
+          grep -RInaE --include='*.smali' 'SceneHolder;->setScene|SceneHolder;->update|f3/b\$a->b|Ll1/e;->c\(' decoded/smali* | head -800 || true
+
           echo '=== ENGLISH GROUP/LINK STRINGS ==='
           grep -nEi 'name="[^"]*(group|link|parent|attach|follow|constraint|empty|null_layer|new_layer|add_layer)[^"]*"' decoded/res/values/strings.xml | head -800 || true
 
