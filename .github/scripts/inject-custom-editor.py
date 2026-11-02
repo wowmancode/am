@@ -396,29 +396,8 @@ def patch_complex_scene_performance(decoded: Path) -> None:
     text = text[:method.start()] + body + text[method.end():]
     scene.write_text(text, encoding="utf-8")
 
-    player = find_one(decoded, "ScenePlayer$2.smali")
-    text = player.read_text(encoding="utf-8")
-    selection_marker = "# Hide editor-only selection overlays while playback is running."
-    if selection_marker not in text:
-        selection_anchor = (
-            "    move-object/from16 v32, v0\n\n"
-            "    .line 44\n")
-        if text.count(selection_anchor) != 1:
-            raise SystemExit("ERROR: preview selection setup changed")
-        selection_hook = (
-            selection_anchor
-            + "    " + selection_marker + "\n"
-            "    move/from16 v0, v31\n"
-            "    sget-object v1, Lcom/alightcreative/app/motion/scene/RenderMode;"
-            "->PLAY:Lcom/alightcreative/app/motion/scene/RenderMode;\n"
-            "    if-ne v0, v1, :customperf_keep_selection\n"
-            "    sget-object v0, Lcom/alightcreative/app/motion/scene/SceneKt;"
-            "->EMPTY_SCENE_SELECTION:Lcom/alightcreative/app/motion/scene/SceneSelection;\n"
-            "    move-object/from16 v32, v0\n"
-            "    :customperf_keep_selection\n")
-        text = text.replace(selection_anchor, selection_hook)
-        player.write_text(text, encoding="utf-8")
-
+    # Selection rendering is left on the native path. Reusing its compiler
+    # registers for a playback-only guard can corrupt project-load state.
     print("  Forced half-size preview rendering and removed preview hot-path work",
           file=sys.stderr)
 
