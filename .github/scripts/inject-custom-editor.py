@@ -408,9 +408,10 @@ def patch_complex_scene_performance(decoded: Path) -> None:
         selection_hook = (
             selection_anchor
             + "    " + selection_marker + "\n"
-            "    sget-object v0, Lcom/alightcreative/app/motion/scene/RenderMode;"
+            "    move/from16 v0, v31\n"
+            "    sget-object v1, Lcom/alightcreative/app/motion/scene/RenderMode;"
             "->PLAY:Lcom/alightcreative/app/motion/scene/RenderMode;\n"
-            "    if-ne v31, v0, :customperf_keep_selection\n"
+            "    if-ne v0, v1, :customperf_keep_selection\n"
             "    sget-object v0, Lcom/alightcreative/app/motion/scene/SceneKt;"
             "->EMPTY_SCENE_SELECTION:Lcom/alightcreative/app/motion/scene/SceneSelection;\n"
             "    move-object/from16 v32, v0\n"
