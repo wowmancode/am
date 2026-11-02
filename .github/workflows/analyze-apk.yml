@@ -59,6 +59,44 @@ jobs:
             if [ -n "$FILE" ]; then sed -n '1,3000p' "$FILE"; fi
           done
 
+      - name: Inspect preview sizing internals
+        shell: bash
+        run: |
+          set -e
+          print_method() {
+            local file="$1" name="$2"
+            echo "=== METHOD $name :: $file ==="
+            awk -v start=".method" -v name="$name" '
+              index($0,".method ") == 1 && index($0,name) {
+                printing=1
+              }
+              printing { print }
+              printing && $0 == ".end method" { exit }
+            ' "$file"
+          }
+
+          SCENE_PLAYER="$(find decoded -type f -name 'ScenePlayer.smali' -print -quit)"
+          SCENE_KT="$(find decoded -type f -name 'SceneKt.smali' -print -quit)"
+          GL_CONTEXT="$(find decoded -type f -name 'GLContext.smali' -print -quit)"
+          EDIT_ACTIVITY="$(find decoded -type f -name 'EditActivity.smali' -print -quit)"
+          SETTINGS="$(find decoded -type f -path '*/com/alightcreative/app/motion/persist/a.smali' -print -quit)"
+
+          print_method "$SCENE_KT" 'renderWithGpu('
+          print_method "$SCENE_KT" 'renderWithGpu$default('
+          print_method "$GL_CONTEXT" ' E()I'
+          print_method "$GL_CONTEXT" ' F()I'
+          print_method "$GL_CONTEXT" ' l0()I'
+          print_method "$SETTINGS" 'getLowQualityPreview()Z'
+          print_method "$SETTINGS" 'setLowQualityPreview(Z)V'
+
+          echo '=== EDITACTIVITY LOW QUALITY NEARBY ==='
+          grep -n -C 100 'getLowQualityPreview' "$EDIT_ACTIVITY" | head -500
+          echo '=== PREVIEW SURFACE UPDATE CLASSES ==='
+          for FILE in $(find decoded -type f -name 'EditActivity$w5.smali' -o -name 'MainActivity$s.smali'); do
+            echo "=== $FILE ==="
+            sed -n '1,1200p' "$FILE"
+          done
+
       - name: Build report
         shell: bash
         run: |
